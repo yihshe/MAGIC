@@ -6,7 +6,6 @@ from utils import inf_loop, MetricTracker
 import wandb
 from model.loss import mse_loss_per_channel
 from IPython import embed
-from utils.util import MemoryBank
 
 
 class Trainer(BaseTrainer):
@@ -75,19 +74,6 @@ class Trainer(BaseTrainer):
 
             # log the loss to wandb
             metrics_per_step = {'train_step/train_loss': loss.item()}
-            # log the loss per band to wandb
-            # loss_per_band = mse_loss_per_channel(output, target)
-            # metrics_per_step.update(
-            #     {f'train_step_channel/train_loss_channel{i}':
-            #         loss_per_band[i].item()
-            #         for i in range(loss_per_band.shape[0])}
-            # )
-            # if batch_idx == 0:
-            #     self.train_loss_per_band = loss_per_band.view(1, -1)
-            # else:
-            #     self.train_loss_per_band = torch.cat((
-            #         self.train_loss_per_band, loss_per_band.view(1, -1)
-            #     ), dim=0)
             wandb.log(metrics_per_step,
                       step=(epoch - 1) * self.len_epoch + batch_idx)
 
@@ -111,25 +97,11 @@ class Trainer(BaseTrainer):
 
         # log the train loss to wandb
         metrics_per_epoch = {'train_epoch/train_loss': log['loss']}
-        # self.train_loss_per_band = torch.mean(
-        #     self.train_loss_per_band, dim=0)
-        # metrics_per_epoch.update(
-        #     {f'train_epoch_channel/train_loss_channel{i}':
-        #      self.train_loss_per_band[i].item()
-        #      for i in range(self.train_loss_per_band.shape[0])}
-        # )
         if self.do_validation:
             val_log = self._valid_epoch(epoch)
             log.update(**{'val_'+k: v for k, v in val_log.items()})
             # log the validation loss to wandb
             metrics_per_epoch.update({'train_epoch/val_loss': val_log['loss']})
-            # self.valid_loss_per_band = torch.mean(
-            #     self.valid_loss_per_band, dim=0)
-            # metrics_per_epoch.update(
-            #     {f'train_epoch_channel/val_loss_channel{i}':
-            #      self.valid_loss_per_band[i].item()
-            #      for i in range(self.valid_loss_per_band.shape[0])}
-            # )
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
@@ -157,15 +129,6 @@ class Trainer(BaseTrainer):
                 target = data_dict[self.target_key].to(self.device)
                 output = self.model(data)
                 loss = self.criterion(output, target)
-
-                # # track the validation loss per band and log to wandb
-                # loss_per_band = mse_loss_per_channel(output, target)
-                # if batch_idx == 0:
-                #     self.valid_loss_per_band = loss_per_band.view(1, -1)
-                # else:
-                #     self.valid_loss_per_band = torch.cat((
-                #         self.valid_loss_per_band, loss_per_band.view(1, -1)
-                #     ), dim=0)
 
                 self.writer.set_step(
                     (epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')

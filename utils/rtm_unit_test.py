@@ -21,7 +21,6 @@ def para_sampling(num_samples=100):
     # run uniform sampling for each variables for the test
     para_dict = {}
     # Brightness Factor (psoil) when using default soil spectrum
-    # para_dict["psoil"] = np.full(num_samples, 0.8)
     para_dict["psoil"] = np.random.uniform(0.0, 1.0, num_samples)
 
     # Leaf Model Parameters
@@ -84,8 +83,6 @@ class RTMTest(unittest.TestCase):
         rtm_np.mod_exec(mode="batch")
         expected_result = rtm_np.myResult
         # run the rtm_torch
-        # rtm_torch.para_reset(**para_dict)
-        # rtm_torch.mod_exec(mode="batch")
         para_dict = {k: torch.tensor(v, dtype=torch.float32)
                      for k, v in para_dict.items()}
         rtm_torch.run(**para_dict)
@@ -120,11 +117,6 @@ class RTMTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # create a log file if it doesn't exist
-    # sys.stdout = open("saved/log/rtm_unittest.log", "w")
-    # stdout = sys.stdout
-    # run the test
-    # with open("/maps/ys611/ai-refined-rtm/saved/log/rtm_unittest.log", "w") as f:
     # Create a custom logger
     logger = logging.getLogger(__name__)
     # Set level of logger
@@ -154,17 +146,10 @@ if __name__ == "__main__":
         total_counts.append(result[2])
         percent_mismatches.append(result[3])
 
-    # print(
-    #     f"Max Absolute Difference over {runs*num_samples*13} elements: \
-    #         {max(max_abs_diffs)}")
     logger.info(f"Max Absolute Difference over {runs*num_samples*13} elements: \
             {max(max_abs_diffs)}")
-    # print(f"Mismatched elements: {sum(mismatch_counts)}")
     logger.info(f"Mismatched elements: {sum(mismatch_counts)}")
-    # print(f"Total elements: {sum(total_counts)}")
     logger.info(f"Total elements: {sum(total_counts)}")
-    # print(f"Percent Mismatch: {round(sum(percent_mismatches)/runs, 3)}%")
     logger.info(f"Percent Mismatch: {round(sum(percent_mismatches)/runs, 3)}%")
-
-    # sys.stdout = stdout
+    
     print("Done!")
