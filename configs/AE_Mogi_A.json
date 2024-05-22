@@ -19,7 +19,7 @@
             "num_workers": 2
         },
         "data_dir_valid": "data/mogi/valid.csv",
-        "data_dir_test": "data/mogi/valid.csv"
+        "data_dir_test": "data/mogi/test.csv"
     },
     "optimizer": {
         "type": "Adam",
