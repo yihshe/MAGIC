@@ -29,7 +29,7 @@ class VanillaAE(BaseModel):
             nn.Linear(16, hidden_dim),
             nn.ReLU(),
         )
-        # TODO modify hidden_dim to 10, add ReLU to decoder and run it again
+        
         self.decoder = nn.Sequential(
             nn.Linear(hidden_dim, 16),
             nn.ReLU(),
@@ -42,14 +42,10 @@ class VanillaAE(BaseModel):
 
     #  define encode function to further process the output of encoder
     def encode(self, x):
-        # TODO add a linear layer to map the output of encoder to the latent biophysical variables
-        # add a sigmoid function to map the output of the linear layer to the range [0,1]
         return self.encoder(x)
 
     #  define decode function to further process the output of decoder
     def decode(self, x):
-        # TODO add a linear layer to map the output of the rtm
-        # Do we need ReLU at the final layer?
         return self.decoder(x)
 
     def forward(self, x):
@@ -79,11 +75,8 @@ class AE_RTM(BaseModel):
             nn.Linear(16, hidden_dim),
             nn.Sigmoid(),
         )
-        # The decoder is the INFORM RTM with fixed parameters
+        # The decoder is the RTM (INFORM) with fixed parameters
         self.decoder = RTM()
-        # NOTE output of rtm_paras from the encoder:
-        # ["N", "cab", "cw", "cm", "LAI", "LAIu", "sd", "h", "fc"]
-        # then, cd will be calculated from sd and fc
         self.rtm_paras = json.load(open(rtm_paras))
         assert hidden_dim == len(
             self.rtm_paras), "hidden_dim must be equal to the number of RTM parameters"
@@ -109,7 +102,7 @@ class AE_RTM(BaseModel):
             min = self.rtm_paras[para_name]['min']
             max = self.rtm_paras[para_name]['max']
             para_dict[para_name] = x[:, i]*(max-min)+min
-        assert 'fc' in para_dict.keys(), "fc must be included in the rtm_paras"
+        assert 'fc' in para_dict.keys(), "fc must be included in rtm_paras"
         # calculate cd from sd and fc
         SD = 500
         para_dict['cd'] = torch.sqrt(
@@ -117,7 +110,6 @@ class AE_RTM(BaseModel):
         para_dict['h'] = torch.exp(
             2.117 + 0.507*torch.log(para_dict['cd']))
         return para_dict
-        # return self.encoder(x)
 
     #  define decode function to further process the output of decoder
     def decode(self, para_dict):
@@ -156,8 +148,8 @@ class AE_RTM_corr(AE_RTM):
 
 class NNRegressor(BaseModel):
     """
-    Approximate Neural Network (ANN) with PyTorch
-    input -> encoder -> decoder -> output
+    Neural Network Regressor with PyTorch
+    input -> encoder-> output
     """
 
     def __init__(self, input_dim, hidden_dim):
@@ -177,13 +169,9 @@ class NNRegressor(BaseModel):
 
     #  define encode function to further process the output of encoder
     def encode(self, x):
-        # output of the encoder is just an NNRegressor
-        # NOTE learning of latents should be conducted in normalized space
         return self.encoder(x)
 
     def forward(self, x):
-        # TODO forward mode can be either "train" or "infer" in the future
-        # so far it is only "train" thus the output is a scale factor
         x = self.encode(x)
         return x
 
@@ -191,14 +179,14 @@ class NNRegressor(BaseModel):
 class AE_Mogi(BaseModel):
     """
     Vanilla AutoEncoder (AE) with Mogi as the decoder
-    input -> encoder (learnable) -> decoder (INFORM) -> output
+    input -> encoder (learnable) -> decoder (Mogi) -> output
     """
 
     def __init__(self, input_dim, hidden_dim, mogi_paras, station_info,
                  standardization):
         super().__init__()
         self.input_dim = input_dim  # 36
-        self.hidden_dim = hidden_dim  # 5
+        self.hidden_dim = hidden_dim  # 4
         # The encoder is learnable neural networks
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, 64),
@@ -232,7 +220,6 @@ class AE_Mogi(BaseModel):
 
     #  define encode function to further process the output of encoder
     def encode(self, x):
-        # x = torch.cat((x, sin, cos), dim=1)
         x = self.encoder(x)
         return x
 
@@ -252,8 +239,6 @@ class AE_Mogi(BaseModel):
             if para_name in ['xcen', 'ycen', 'd']:
                 para_dict[para_name] = para_dict[para_name]*1000
 
-        # para_dict['dV'] = para_dict['dV_factor'] * \
-        #     torch.pow(10, para_dict['dV_power'])  # m^3
         para_dict['dV'] = para_dict['dV'] * \
             torch.pow(10, torch.tensor(5)) - torch.pow(10, torch.tensor(7))
 
@@ -274,18 +259,14 @@ class AE_Mogi(BaseModel):
             # output in mm, same as the input
             output = self.decoder.run(para_dict['xcen'], para_dict['ycen'],
                                       para_dict['d'], para_dict['dV'])
-        # NOTE scaling the output with mean and scale helps the model to learn better
+        # scaling the output with mean and scale helps the model to learn better
         return (output-self.x_mean)/self.x_scale
-
-    # def forward(self, x):
-    #     para_dict = self.encode(x)
-    #     x = self.decode(para_dict)
-    #     return x
 
     def forward(self, x):
         x0 = self.encode(x)
         x1 = self.transform(x0)
         x2 = self.decode(x1)
+        # return all the outputs for visualization and analysis
         return x0, x1, x2
 
 
@@ -306,18 +287,11 @@ class AE_Mogi_corr(AE_Mogi):
         )
 
     def correct(self, x):
-        # x = torch.cat((x, sin, cos), dim=1)
         return self.correction(x)
 
-    # def forward(self, x):
-    #     x = self.encode(x)
-    #     x = self.decode(x)
-    #     x = self.correct(x)
-    #     return x
     def forward(self, x):
         x0 = self.encode(x)
         x1 = self.transform(x0)
         x2 = self.decode(x1)
         x3 = self.correct(x2)
         return x0, x1, x2, x3
-        # return x3
