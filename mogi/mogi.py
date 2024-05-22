@@ -6,7 +6,6 @@ class Mogi():
     A class used to represent a point source using the Mogi (1958) model.
     PyTorch implementation adapted from the original Versatile Modeling of 
     Deformation (VMOD) implementation. 
-    NOTE: model is under assumptions to be confirmed later. 
 
     Attributes
     ----------
@@ -23,11 +22,6 @@ class Mogi():
             y (Tensor): y-coordinate of stations (1D tensor)
             nu (float): poisson's ratio for medium (default 0.25)
             mu (float): shear modulus for medium (Pa) (default 4e9)
-
-        TODO:
-            - Bound range of parameters to learn
-            - Locations of stations
-            - Function to generate synthetic data
         """
         self.x = x
         self.y = y
