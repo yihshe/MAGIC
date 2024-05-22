@@ -37,10 +37,8 @@ class DisplacementGPSSeq(data.Dataset):
         self.data_df = pd.read_csv(csv_path)
         self.data_df['date'] = pd.to_datetime(self.data_df['date'])
         self.data_df = self.data_df.sort_values(by='date')
-        # self.data_df['date'] = self.data_df['date'].dt.strftime('%Y-%m-%d')
 
     def __len__(self):
-        # return len(self.data_df) - self.seq_len + 1
         return (len(self.data_df) - self.seq_len) // self.step_size + 1
 
     def __getitem__(self, idx):
@@ -50,8 +48,7 @@ class DisplacementGPSSeq(data.Dataset):
         data_dict['displacement'] = torch.tensor(
             sample.iloc[:, :36].values.astype('float32')
         ).to(torch.float32)
-        # NOTE this dataloader is used for training, without loading date
-        # data_dict['date'] = sample['date'].values
+        # this dataloader is used for training, without loading date
         for k in ['sin_date', 'cos_date']:
             data_dict[k] = torch.tensor(
                 sample[k].values.astype('float32')
