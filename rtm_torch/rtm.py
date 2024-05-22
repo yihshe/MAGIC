@@ -2,14 +2,13 @@
 """
 ***************************************************************************
     rtm.py - Adapted from the original RTM code IVVM_GUI.py by Martin Danner
-    the adapted rtm will be implemented in PyTorch to train neural networks
+    The adapted rtm will be implemented in PyTorch to train neural networks
 ***************************************************************************
     IVVRM_GUI.py - LMU Agri Apps - Interactive Visualization of Vegetation Reflectance Models (IVVRM)
     -----------------------------------------------------------------------
     begin                : 01/2018
     copyright            : (C) 2018 Martin Danner; Matthias Wocher
     email                : m.wocher@lmu.de
-
 ***************************************************************************
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -92,7 +91,6 @@ class RTM():
     def rtm_init(self, sensor="Sentinel2_Full", lop="prospectD",
                  canopy_arch="inform"):
         # create new Instance of the RTM
-        # TODO scale the real dataset by 10000.0, and use the default value of int_boost 1.0
         return mod.InitModel(lop=lop, canopy_arch=canopy_arch, nodat=-999,
                              int_boost=1.0, s2s=sensor)
 
@@ -151,9 +149,9 @@ class RTM():
         # typeLIDF: Leaf Angle Distribution (LIDF) type: 1 = Beta, 2 = Ellipsoidal
         # if typeLIDF = 2, LIDF is set to between 0 and 90 as Leaf Angle to calculate the Ellipsoidal distribution
         # if typeLIDF = 1, LIDF is set between 0 and 5 as index of one of the six Beta distributions
-        self.para_dict["typeLIDF"] = 1  # 2
+        self.para_dict["typeLIDF"] = 1  
         # LIDF: Leaf Angle (LIDF), only used when LIDF is Ellipsoidal
-        self.para_dict["LIDF"] = 5  # 30
+        self.para_dict["LIDF"] = 5  
         # hspot: Hot Spot Size Parameter (Hspot)
         self.para_dict["hspot"] = 0.01
         # tto: Observation zenith angle (Tto)
@@ -177,7 +175,7 @@ class RTM():
         self.para_dict = {k: torch.tensor([v], dtype=torch.float32).to(
             self.device) for k, v in self.para_dict.items()}
 
-        # TODO set data_mean to None for future evaluations
+        # set data_mean to None for future evaluations
         self.data_mean = None
 
         # Flag to indicate whether the non-learnable parameters have been reset
@@ -204,14 +202,6 @@ class RTM():
         it is the function to sort all inputs and call PROSAIL with the 
         selected settings
         """
-        # # create new Instance of the RTM
-        # # TODO reset int_boost to 10000.0 for future evaluations
-        # mod_I = mod.InitModel(
-        #     lop=self.lop, canopy_arch=self.canopy_arch, nodat=-999,
-        #     int_boost=1.0, s2s=self.sensor
-        # )
-
-        # the pytorch model will only run in batch mode
         self.myResult = self.mod_I.initialize_multiple_simple(soil=self.bg_spec,
                                                               **self.para_dict)
 

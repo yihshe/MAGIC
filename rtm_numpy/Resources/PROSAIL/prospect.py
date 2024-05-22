@@ -23,7 +23,7 @@ Jacquemoud S., & Baret F. (1990): PROSPECT: a model of leaf optical properties s
 
 
 from scipy.special import exp1
-from rtm.Resources.PROSAIL.dataSpec import *
+from rtm_numpy.Resources.PROSAIL.dataSpec import *
 import numpy as np
 
 

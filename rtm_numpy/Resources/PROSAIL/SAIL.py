@@ -14,8 +14,8 @@ Verhoef W. (1984), Light scattering by leaf layers with application to canopy re
 Remote Sensing of Environment, 16, 125-141. Article.
 '''
 
-from rtm.Resources.PROSAIL.dataSpec import *
-from rtm.Resources.PROSAIL.SAILdata import *
+from rtm_numpy.Resources.PROSAIL.dataSpec import *
+from rtm_numpy.Resources.PROSAIL.SAILdata import *
 import numpy as np
 
 

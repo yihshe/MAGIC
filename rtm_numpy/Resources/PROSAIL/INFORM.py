@@ -89,7 +89,7 @@ Coupling INFORM with Prospect4/5: Henning Buddenbaum, 2012
 _________________________________________________________________________
 """
 
-from rtm.Resources.PROSAIL.dataSpec import *
+from rtm_numpy.Resources.PROSAIL.dataSpec import *
 
 
 class INFORM:

@@ -122,12 +122,6 @@ class Spec2Sensor:
             sum_wfactor = sum(self.srf[i][sensor_band][1].item()
                               for i in wfactor_include)
 
-            # try:
-            #     # divide by the sum to get a weighted average
-            #     spec_corr[:, sensor_band] /= sum_wfactor
-            # except ZeroDivisionError:  # this happens when no srf-value can be extracted from the original data
-            #     spec_corr[:, sensor_band] = self.nodat
-
             if sum_wfactor != 0:
                 # divide by the sum to get a weighted average
                 spec_corr[:, sensor_band] /= sum_wfactor

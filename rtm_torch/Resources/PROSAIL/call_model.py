@@ -166,8 +166,6 @@ class CallModel:
         return inform
 
 # The class "Init_Model" initializes the models
-
-
 class InitModel:
 
     # __init__ contains default values, but it is recommended to provide actual values for it
@@ -217,15 +215,6 @@ class InitModel:
     def initialize_single(self, soil=None, **paras):
         # Initialize a single run of PROSAIL (simplification for building of para_grid)
         self.soil = soil
-        # if self.s2s != "default":
-        #     self.s2s_I = Spec2Sensor(sensor=self.s2s, nodat=self.nodat)
-        #     sensor_init_success = self.s2s_I.init_sensor()
-        #     if not sensor_init_success:
-        #         raise Exception(
-        #             "Could not convert spectra to sensor resolution!")
-
-        # shape 1 for single run
-        # TODO para_grid also needs to be put on device
         para_grid = torch.empty((1, len(paras.keys()))).to(self.device)
         for ikey, key in enumerate(self.para_names):
             para_grid[0, ikey] = paras[key]

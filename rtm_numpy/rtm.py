@@ -31,8 +31,8 @@ import os
 import numpy as np
 from scipy.interpolate import interp1d
 
-from rtm.Resources.PROSAIL import call_model as mod
-from rtm.Resources.Spec2Sensor.Spec2Sensor_core import Spec2Sensor, BuildTrueSRF, BuildGenericSRF
+from rtm_numpy.Resources.PROSAIL import call_model as mod
+from rtm_numpy.Resources.Spec2Sensor.Spec2Sensor_core import Spec2Sensor, BuildTrueSRF, BuildGenericSRF
 from rtm import APP_DIR
 
 import warnings
@@ -141,7 +141,7 @@ class RTM:
         # cd: Crown Diameter (CD)
         self.para_dict["cd"] = 4.5
 
-        # TODO set data_mean to None for future evaluations
+        # set data_mean to None for future evaluations
         self.data_mean = None
 
         self.reset_non_learnable = True
@@ -163,9 +163,6 @@ class RTM:
         self.bg_spec = bg_spec
 
     def para_reset(self, **para_dict):
-        # TODO decide the learnable parameters to reset
-        # TODO should we bound the range of parameters in model training?
-        # or should the model just learn a scale factor as in Pheno-VAE?
         self.para_dict.update(para_dict)
         # print("Parameters updated!")
         if self.reset_non_learnable:
@@ -192,8 +189,6 @@ class RTM:
             int_boost=1.0, s2s=self.sensor
         )
         # initialize a single model run
-        # TODO decide which parameters are learnable or to be learned
-        # TODO how to bound the parameters range during the learning process?
         if mode == "single":
             self.myResult = mod_I.initialize_single(soil=self.bg_spec,
                                                     tts=self.para_dict["tts"],
