@@ -16,13 +16,11 @@ def main(config):
     logger = config.get_logger('test')
 
     # setup data_loader instances
-    # NOTE the test set needs to be set beforehand e.g. in dataset.py
     data_loader = getattr(module_data, config['data_loader']['type_test'])(
         config['data_loader']['data_dir_test'],
         batch_size=512,
         shuffle=False,
         validation_split=0.0,
-        # training=False,
         num_workers=2
     )
 
@@ -54,16 +52,12 @@ def main(config):
 
     # analyze the reconstruction loss per band
     if config['arch']['type'] == 'VanillaAE':
-        # ATTRS = ['1', '2', '3', '4', '5']
+        # use number of the latent codes as their names
         ATTRS = [str(i+1) for i in range(config['arch']['args']['hidden_dim'])]
     else:
-        # ATTRS = ['xcen', 'ycen', 'd', 'dV_factor', 'dV_power', 'dV']
         ATTRS = ['xcen', 'ycen', 'd', 'dV']
 
     analyzer = {}
-    mogi = RTM()
-    MEAN = np.load('/maps/ys611/ai-refined-rtm/data/mogi/train_x_mean.npy')
-    SCALE = np.load('/maps/ys611/ai-refined-rtm/data/mogi/train_x_scale.npy')
     station_info = json.load(open(
         '/maps/ys611/ai-refined-rtm/configs/mogi/station_info.json'))
     GPS = []
@@ -80,20 +74,15 @@ def main(config):
                 output = outputs[-1]
                 latent = outputs[1]
                 if config['arch']['type'] == 'AE_Mogi_corr':
+                    # get the model output and compute the bias
                     init_output = outputs[2]
                     bias = output - init_output
             elif config['arch']['type'] == 'VanillaAE':
                 output = model(data)
                 latent = model.encode(data)
 
-            # calcualte the corrected bias if the model is AE_RTM_corr
+            # add the model output and corrected bias if the model is AE_RTM_corr
             if config['arch']['type'] in ['AE_Mogi_corr']:
-                # calculate the direct output from RTM
-                # output, init_output = model.decode(latent)
-
-                # calculate the bias
-                # NOTE bias in original scale = bias*SCALE if the data is scaled
-                # bias = output - init_output
                 data_concat(analyzer, 'init_output', init_output)
                 data_concat(analyzer, 'bias', bias)
 
@@ -108,7 +97,6 @@ def main(config):
             # l2_per_band = torch.square(output-target)
             data_concat(analyzer, 'output', output)
             data_concat(analyzer, 'target', target)
-            # data_concat(analyzer, 'l2', l2_per_band)
             data_concat(analyzer, 'latent', latent)
             data_concat(analyzer, 'date', data_dict['date'])
 
@@ -134,7 +122,7 @@ def main(config):
             columns += [k+'_'+b for b in GPS]
         else:
             columns += [k+'_'+b for b in ATTRS]
-    # TODO hstack the columns we want to save
+    # hstack the columns we want to save
     data = torch.hstack((
         analyzer['output'],
         analyzer['target'],
