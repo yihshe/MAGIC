@@ -1,0 +1,1 @@
+# MAGIC: Modular Auto-encoder for Generalisable Model Inversion with Bias Corrections
