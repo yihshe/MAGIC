@@ -24,13 +24,11 @@ def main(config):
 
     # setup data_loader instances
     data_loader = config.init_obj('data_loader', module_data)
-    # valid_data_loader = data_loader.split_validation()
     valid_data_loader = getattr(module_data, config['data_loader']['type'])(
         config['data_loader']['data_dir_valid'],
         batch_size=64,
         shuffle=True,
-        validation_split=0.0,
-        # training=False,
+        validation_split=0.0, # the validation set is already separated
         num_workers=2
     )
     
@@ -45,12 +43,11 @@ def main(config):
     if len(device_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=device_ids)
 
-    # TODO set up loss function, metrics
     # get function handles of loss and metrics
     criterion = getattr(module_loss, config['loss'])
     metrics = [getattr(module_metric, met) for met in config['metrics']]
 
-    # build optimizer, learning rate scheduler. delete every lines containing lr_scheduler for disabling scheduler
+    # build optimizer, learning rate scheduler. 
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
     lr_scheduler = config.init_obj(
@@ -67,7 +64,6 @@ def main(config):
 
 
 if __name__ == '__main__':
-    # TODO change the description of argparse
     args = argparse.ArgumentParser(description='PyTorch Template')
     args.add_argument('-c', '--config', default=None, type=str,
                       help='config file path (default: None)')
@@ -76,7 +72,7 @@ if __name__ == '__main__':
     args.add_argument('-d', '--device', default=None, type=str,
                       help='indices of GPUs to enable (default: all)')
 
-    # custom cli options to modify configuration from default values given in json file.
+    # custom options to modify configuration from default values given in json file.
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
     options = [
         CustomArgs(['--lr', '--learning_rate'],
@@ -87,8 +83,8 @@ if __name__ == '__main__':
     config = ConfigParser.from_args(args, options)
 
     wandb.init(
-        project="ai-refined-rtm",
-        entity="yihshe",
+        project="MAGIC",
+        entity="replace_me_with_your_wandb_username",
         name=f"{config['name']}-{config['arch']['args']['hidden_dim']}",
         config=config,
         mode="online" if config['trainer']['wandb'] else "disabled",
