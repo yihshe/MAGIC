@@ -15,13 +15,11 @@ def main(config):
     logger = config.get_logger('test')
 
     # setup data_loader instances
-    # NOTE the test set needs to be set beforehand e.g. in dataset.py
     data_loader = getattr(module_data, config['data_loader']['type'])(
         config['data_loader']['data_dir_test'],
         batch_size=512,
         shuffle=False,
         validation_split=0.0,
-        # training=False,
         num_workers=2
     )
 
@@ -56,39 +54,26 @@ def main(config):
                 'B07_RE3', 'B08_NIR1', 'B8A_NIR2', 'B09_WV', 'B11_SWI1',
                 'B12_SWI2']
     if config['arch']['type']=='VanillaAE':
+        # use number of the latent codes as their names
         ATTRS = ['1', '2', '3', '4', '5', '6', '7']
     else:
+        # first seven variables to be learned directly from RTM
         ATTRS = ['N', 'cab', 'cw', 'cm', 'LAI', 'LAIu', 'fc', 'cd', 'h']
 
     analyzer = {}
-    rtm = RTM()
-    S2_FULL_BANDS = ['B01', 'B02_BLUE', 'B03_GREEN', 'B04_RED',
-                    'B05_RE1', 'B06_RE2', 'B07_RE3', 'B08_NIR1',
-                    'B8A_NIR2', 'B09_WV', 'B10', 'B11_SWI1',
-                    'B12_SWI2']
-    bands_index = [i for i in range(
-        len(S2_FULL_BANDS)) if S2_FULL_BANDS[i] not in ['B01', 'B10']]
-    MEAN = np.load('/maps/ys611/ai-refined-rtm/data/real/train_x_mean.npy')
-    SCALE = np.load('/maps/ys611/ai-refined-rtm/data/real/train_x_scale.npy')
 
     with torch.no_grad():
-        # for i, (data, target) in enumerate(tqdm(data_loader)):
-        #     data, target = data.to(device), target.to(device)
         for batch_idx, data_dict in enumerate(data_loader):
-            # TODO change the input and target keys
             data = data_dict[data_key].to(device)
             target = data_dict[target_key].to(device)
             output = model(data)
             latent = model.encode(data)
 
             # calcualte the corrected bias if the model is AE_RTM_corr
-            if config['arch']['type'] in ['AE_RTM_corr', 'AE_RTM_corr_con']:
+            if config['arch']['type'] == 'AE_RTM_corr':
                 # calculate the direct output from RTM
-                # init_output = model.decode(latent)
-                init_output = rtm.run(**latent)[:, bands_index]
-                # calculate the bias 
-                # NOTE the bias will need to be scaled back to original scale
-                bias = (output*SCALE + MEAN) - init_output
+                init_output = model.decode(latent)
+                bias = output - init_output # to scale bias back, multiply only by SCALE
                 data_concat(analyzer, 'init_output', init_output)
                 data_concat(analyzer, 'bias', bias)
 
@@ -99,10 +84,8 @@ def main(config):
                 # latent is a dictionary of parameters, convert it to a tensor
                 latent = torch.stack([latent[k] for k in latent.keys()], dim=1)
             
-            l2_per_band = torch.square(output-target)
             data_concat(analyzer, 'output', output)
             data_concat(analyzer, 'target', target)
-            data_concat(analyzer, 'l2', l2_per_band)
             data_concat(analyzer, 'latent', latent)
             data_concat(analyzer, 'sample_id', data_dict['sample_id'])
             data_concat(analyzer, 'class', data_dict['class'])
@@ -134,10 +117,9 @@ def main(config):
     data = torch.hstack((
         analyzer['output'],
         analyzer['target'],
-        analyzer['l2'],
         analyzer['latent']
     ))
-    if config['arch']['type'] in ['AE_RTM_corr', 'AE_RTM_corr_con']:
+    if config['arch']['type'] == 'AE_RTM_corr':
         columns += ['init_output_'+b for b in S2_BANDS]
         columns += ['bias_'+b for b in S2_BANDS]
         data = torch.hstack((
