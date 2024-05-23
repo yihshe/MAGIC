@@ -15,13 +15,11 @@ from rtm_torch.rtm import RTM
 def main(config):
     logger = config.get_logger('test')
     # setup data_loader instances
-    # NOTE the test set needs to be set beforehand e.g. in dataset.py
     data_loader = getattr(module_data, config['data_loader']['type'])(
         config['data_loader']['data_dir_test'],
         batch_size=512,
         shuffle=False,
         validation_split=0.0,
-        # training=False,
         num_workers=2
     )
 
@@ -59,15 +57,15 @@ def main(config):
     ATTRS = ['N', 'cab', 'cw', 'cm', 'LAI', 'LAIu', 'fc']
 
     # load rtm_paras
-    rtm_paras = json.load(open("/maps/ys611/ai-refined-rtm/configs/rtm_paras.json"))
-    assert ATTRS == list(rtm_paras.keys()), "ATTRS must be consistent with rtm_paras"
+    rtm_paras = json.load(open("configs/rtm_paras.json"))
+    assert ATTRS == list(rtm_paras.keys()), "ATTRS do not match!"
     rtm = RTM()
     
     x_mean = torch.tensor(
-        np.load("/maps/ys611/ai-refined-rtm/data/synthetic/20240124/train_x_mean.npy")
+        np.load("data/rtm/synthetic/20240124/train_x_mean.npy")
         ).float().unsqueeze(0).to(device)
     x_scale = torch.tensor(
-        np.load("/maps/ys611/ai-refined-rtm/data/synthetic/20240124/train_x_scale.npy")
+        np.load("data/rtm/synthetic/20240124/train_x_scale.npy")
         ).float().unsqueeze(0).to(device)
     bands_index = [i for i in range(
         len(S2_FULL_BANDS)) if S2_FULL_BANDS[i] not in ['B01', 'B10']]
@@ -76,8 +74,10 @@ def main(config):
     analyzer = {}
 
     if config['data_loader']['type'] == 'SyntheticS2DataLoader':
+        # test on the synthetic test set
         mode = "test"
     elif config['data_loader']['type'] == 'SpectrumS2DataLoader':
+        # infer on the real test set to reconstruct the spectral bands
         mode = "infer"
 
     if mode == "test":
@@ -91,11 +91,8 @@ def main(config):
                 data = data_dict[data_key].to(device)
                 target = data_dict[target_key].to(device)
                 output = model(data)
-                # concatenate the loss per band to the loss_analyzer
-                l2_per_band = torch.square(output-target)
                 data_concat(analyzer, 'output', output)
                 data_concat(analyzer, 'target', target)
-                data_concat(analyzer, 'l2', l2_per_band)
 
                 # computing loss, metrics on test set
                 loss = loss_fn(output, target)
@@ -114,14 +111,13 @@ def main(config):
 
         # save the analyzer to csv using pandas
         columns = []
-        for k in ['output', 'target', 'l2']:
+        for k in ['output', 'target']:
             columns += [k+'_'+b for b in ATTRS]
 
-        # NOTE all the output and target variales here are saved in the normalized scale ranging from 0 to 1
+        # both output and target variales here are saved in the normalized scale ranging from 0 to 1
         data = torch.hstack((
             analyzer['output'],
             analyzer['target'],
-            analyzer['l2'],
         )).cpu().numpy()
         df = pd.DataFrame(columns=columns, data=data)
         df.to_csv(str(config.resume).split('.pth')[0]+'_testset_analyzer_syn.csv',
@@ -136,7 +132,7 @@ def main(config):
         where the predicted variables will be saved, and the reconstructed spectra
         will be compared with the real spectra and the corresponding MSE loss will
         be calculated.
-        Note that spectra of the real test set has been standardized using the
+        Note that spectra of the real test set will need to be standardized using the
         mean and std of the synthetic training set, on which the NNRegressor is
         trained. 
         """
@@ -144,7 +140,6 @@ def main(config):
         with torch.no_grad():
             for batch_idx, data_dict in enumerate(data_loader):
                 data = data_dict[data_key].to(device)
-                # target = data_dict[target_key].to(device)
                 latent = model(data)
                 # concatenate the loss per band to the loss_analyzer
                 data_concat(analyzer, 'latent', latent)
@@ -206,10 +201,6 @@ def data_concat(analyzer: dict, key: str, data):
 def vars2spectra(x: torch.tensor,rtm: RTM, rtm_paras: dict, 
                  x_mean: torch.tensor, x_scale: torch.tensor, 
                  bands_index: list):
-    # convert the variables to spectra
-    # x: [batch_size, n_vars]
-    # rtm_paras: dict
-    # return: [batch_size, n_bands]
     para_dict = {}
     for i, para_name in enumerate(rtm_paras.keys()):
         min = rtm_paras[para_name]['min']
