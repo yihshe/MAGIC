@@ -11,14 +11,14 @@
     "data_loader": {
         "type": "SpectrumS2DataLoader",
         "args": {
-            "data_dir": "data/rtm/real/train.csv",
+            "data_dir": "data/processed/rtm/real/train.csv",
             "batch_size": 64,
             "shuffle": true,
             "validation_split": 0.0,
             "num_workers": 2
         },
-        "data_dir_valid": "data/rtm/real/valid.csv",
-        "data_dir_test": "data/rtm/real/test.csv"
+        "data_dir_valid": "data/processed/rtm/real/valid.csv",
+        "data_dir_test": "data/processed/rtm/real/test.csv"
     },
     "optimizer": {
         "type": "Adam",

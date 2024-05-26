@@ -11,14 +11,14 @@
     "data_loader": {
         "type": "SyntheticS2DataLoader",
         "args": {
-            "data_dir": "data/rtm/synthetic/train.csv",
+            "data_dir": "data/processed/rtm/synthetic/train.csv",
             "batch_size": 64,
             "shuffle": true,
             "validation_split": 0.0,
             "num_workers": 2
         },
-        "data_dir_valid": "data/rtm/synthetic/valid.csv",
-        "data_dir_test": "data/rtm/synthetic/test.csv"
+        "data_dir_valid": "data/processed/rtm/synthetic/valid.csv",
+        "data_dir_test": "data/processed/rtm/synthetic/test.csv"
     },
     "optimizer": {
         "type": "Adam",

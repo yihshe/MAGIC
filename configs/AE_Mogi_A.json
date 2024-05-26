@@ -12,14 +12,14 @@
         "type": "GPSDataLoader",
         "type_test": "GPSDataLoader",
         "args": {
-            "data_dir": "data/mogi/train.csv",
+            "data_dir": "data/processed/mogi/train.csv",
             "batch_size": 60,
             "shuffle": true,
             "validation_split": 0.0,
             "num_workers": 2
         },
-        "data_dir_valid": "data/mogi/valid.csv",
-        "data_dir_test": "data/mogi/test.csv"
+        "data_dir_valid": "data/processed/mogi/valid.csv",
+        "data_dir_test": "data/processed/mogi/test.csv"
     },
     "optimizer": {
         "type": "Adam",

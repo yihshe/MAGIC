@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -6,7 +7,7 @@ import json
 from base import BaseModel
 from rtm_torch.rtm import RTM
 from mogi.mogi import Mogi
-from utils.util import MemoryBank
+from model import SCRIPT_DIR, PARENT_DIR
 
 
 class VanillaAE(BaseModel):
@@ -77,7 +78,7 @@ class AE_RTM(BaseModel):
         )
         # The decoder is the RTM (INFORM) with fixed parameters
         self.decoder = RTM()
-        self.rtm_paras = json.load(open(rtm_paras))
+        self.rtm_paras = json.load(open(os.path.join(PARENT_DIR, rtm_paras)))
         assert hidden_dim == len(
             self.rtm_paras), "hidden_dim must be equal to the number of RTM parameters"
         S2_FULL_BANDS = ['B01', 'B02_BLUE', 'B03_GREEN', 'B04_RED',
@@ -90,9 +91,11 @@ class AE_RTM(BaseModel):
         self.device = self.device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
         self.x_mean = torch.tensor(
-            np.load(standardization['x_mean'])).float().unsqueeze(0).to(self.device)
+            np.load(os.path.join(PARENT_DIR,standardization['x_mean']))
+            ).float().unsqueeze(0).to(self.device)
         self.x_scale = torch.tensor(
-            np.load(standardization['x_scale'])).float().unsqueeze(0).to(self.device)
+            np.load(os.path.join(PARENT_DIR, standardization['x_scale']))
+            ).float().unsqueeze(0).to(self.device)
 
     #  define encode function to further process the output of encoder
     def encode(self, x):
@@ -200,23 +203,26 @@ class AE_Mogi(BaseModel):
         )
         #
         # The decoder is the INFORM RTM with fixed parameters
-        self.station_info = json.load(open(station_info))
+        self.station_info = json.load(open(os.path.join(PARENT_DIR, 
+                                                        station_info)))
         x = torch.tensor([self.station_info[k]['xE']
                          for k in self.station_info.keys()])*1000  # m
         y = torch.tensor([self.station_info[k]['yN']
                          for k in self.station_info.keys()])*1000  # m
         self.decoder = Mogi(x, y)
 
-        self.mogi_paras = json.load(open(mogi_paras))
+        self.mogi_paras = json.load(open(os.path.join(PARENT_DIR, mogi_paras)))
         assert hidden_dim == len(
             self.mogi_paras), "hidden_dim must be equal to the number of Mogi parameters"
         # Mean and scale for standardization of model input
         self.device = self.device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
-        self.x_mean = torch.tensor(
-            np.load(standardization['x_mean'])).float().unsqueeze(0).to(self.device)
-        self.x_scale = torch.tensor(
-            np.load(standardization['x_scale'])).float().unsqueeze(0).to(self.device)
+        self.x_mean = torch.tensor(np.load(
+            os.path.join(PARENT_DIR, standardization['x_mean'])
+            )).float().unsqueeze(0).to(self.device)
+        self.x_scale = torch.tensor(np.load(
+            os.path.join(PARENT_DIR,standardization['x_scale'])
+            )).float().unsqueeze(0).to(self.device)
 
     #  define encode function to further process the output of encoder
     def encode(self, x):
