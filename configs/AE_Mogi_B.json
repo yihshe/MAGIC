@@ -6,8 +6,8 @@
         "args": {
             "input_dim": 36,
             "hidden_dim": 4,
-            "mogi_paras": "configs/mogi/mogi_paras.json",
-            "station_info": "configs/mogi/station_info.json",
+            "mogi_paras": "configs/mogi_paras.json",
+            "station_info": "configs/station_info.json",
             "standardization": {
                 "x_mean": "data/processed/mogi/train_x_mean.npy",
                 "x_scale": "data/processed/mogi/train_x_scale.npy"
