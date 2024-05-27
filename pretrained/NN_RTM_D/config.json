@@ -1,0 +1,53 @@
+{
+    "name": "NN_RTM_D",
+    "n_gpu": 1,
+    "arch": {
+        "type": "NNRegressor",
+        "args": {
+            "input_dim": 11,
+            "hidden_dim": 7
+        }
+    },
+    "data_loader": {
+        "type": "SyntheticS2DataLoader",
+        "args": {
+            "data_dir": "data/processed/rtm/synthetic/train.csv",
+            "batch_size": 64,
+            "shuffle": true,
+            "validation_split": 0.0,
+            "num_workers": 2
+        },
+        "data_dir_valid": "data/processed/rtm/synthetic/valid.csv",
+        "data_dir_test": "data/processed/rtm/synthetic/test.csv"
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 0.001,
+            "weight_decay": 0.0001,
+            "amsgrad": true
+        }
+    },
+    "loss": "mse_loss",
+    "metrics": [],
+    "lr_scheduler": {
+        "type": "StepLR",
+        "args": {
+            "step_size": 50,
+            "gamma": 0.1
+        }
+    },
+    "trainer": {
+        "epochs": 100,
+        "save_dir": "saved/rtm",
+        "save_period": 10,
+        "verbosity": 2,
+        "monitor": "min val_loss",
+        "early_stop": 10,
+        "input_key": "spectrum",
+        "output_key": "rtm_paras",
+        "stablize_grad": false,
+        "tensorboard": false,
+        "wandb": false
+    }
+}
