@@ -3,7 +3,7 @@ Scientists often model physical processes to understand the natural world and un
 
 ## Approach
 **Learning the inverse**, end-to-end, in an encoder that includes correction layers $\mathbf{C}$.
-![Learning the inverse, end-to-end, in an encoder that includes correction layers $\mathbf{C}$](figures/model_flowchart.png)
+![Learning the inverse, end-to-end, in an encoder that includes correction layers $\mathbf{C}$](./figures/model_flowchart.png)
 
 ## Requirements
 To install requirements:
