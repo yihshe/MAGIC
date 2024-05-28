@@ -47,7 +47,7 @@ MAGIC/
   │   ├── metric.py
   │   └── loss.py
   │
-  ├── Mogi/ - PyTorch implementation of Mogi model
+  ├── mogi/ - PyTorch implementation of Mogi model
   │
   ├── rtm_numpy/ - NumPy implementation of RTM model
   │
