@@ -48,16 +48,12 @@ MAGIC/
   │   └── loss.py
   │
   ├── Mogi/ - PyTorch implementation of Mogi model
-  │   └── ...
   │
   ├── rtm_numpy/ - NumPy implementation of RTM model
-  │   └── ...
   │
   ├── rtm_torch/ - PyTorch implementation of RTM model
-  │   └── ...
   │
   ├── pretrained/ - pretrained models for evaluation
-  │   └── ...
   │
   ├── saved/
   │   ├── models/ - trained models are saved here
