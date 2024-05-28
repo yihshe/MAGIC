@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.utils.data as data
+import os
+from datasets import PARENT_DIR
 
 
 class DisplacementGPS(data.Dataset):
@@ -9,7 +11,7 @@ class DisplacementGPS(data.Dataset):
         super(DisplacementGPS, self).__init__()
         # the dataset is a tabular data of GPS displacement data
         # each row is displacements from 12 stations at the same time point
-        self.data_df = pd.read_csv(csv_path)
+        self.data_df = pd.read_csv(os.path.join(PARENT_DIR, csv_path))
 
     def __len__(self):
         return len(self.data_df)
@@ -34,7 +36,7 @@ class DisplacementGPSSeq(data.Dataset):
         super(DisplacementGPSSeq, self).__init__()
         self.seq_len = seq_len
         self.step_size = step_size
-        self.data_df = pd.read_csv(csv_path)
+        self.data_df = pd.read_csv(os.path.join(PARENT_DIR, csv_path))
         self.data_df['date'] = pd.to_datetime(self.data_df['date'])
         self.data_df = self.data_df.sort_values(by='date')
 

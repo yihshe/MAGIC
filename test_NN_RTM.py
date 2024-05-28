@@ -10,6 +10,8 @@ import pandas as pd
 import numpy as np
 import json
 from rtm_torch.rtm import RTM
+import os
+CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 def main(config):
@@ -62,10 +64,12 @@ def main(config):
     rtm = RTM()
     
     x_mean = torch.tensor(
-        np.load("data/rtm/synthetic/20240124/train_x_mean.npy")
+        np.load(os.path.join(
+            CURRENT_DIR,"data/processed/rtm/synthetic/train_x_mean.npy"))
         ).float().unsqueeze(0).to(device)
     x_scale = torch.tensor(
-        np.load("data/rtm/synthetic/20240124/train_x_scale.npy")
+        np.load(os.path.join(
+            CURRENT_DIR, "data/processed/rtm/synthetic/train_x_scale.npy"))
         ).float().unsqueeze(0).to(device)
     bands_index = [i for i in range(
         len(S2_FULL_BANDS)) if S2_FULL_BANDS[i] not in ['B01', 'B10']]
@@ -183,10 +187,13 @@ def main(config):
         df['sample_id'] = analyzer['sample_id']
         df['class'] = analyzer['class']
         df['date'] = analyzer['date']
-        df.to_csv(str(config.resume).split('.pth')[0]+'_testset_analyzer_real.csv',
+        df.to_csv(
+            os.path.join(CURRENT_DIR, 
+                         str(config.resume).split('.pth')[0]+'_testset_analyzer_real.csv'),
                   index=False)
         logger.info('Analyzer saved to {}'.format(
-            str(config.resume).split('.pth')[0]+'_testset_analyzer_real.csv'
+            os.path.join(CURRENT_DIR,
+                         str(config.resume).split('.pth')[0]+'_testset_analyzer_real.csv')
         ))
 
 

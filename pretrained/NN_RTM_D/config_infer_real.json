@@ -10,7 +10,7 @@
     },
     "data_loader": {
         "type": "SpectrumS2DataLoader",
-        "data_dir_test": "data/processed/rtm/synthetic/test_NN_RTM_D.csv"
+        "data_dir_test": "data/processed/rtm/real/test_NN_RTM_D.csv"
     },
     "loss": "mse_loss",
     "metrics": [],

@@ -2,13 +2,15 @@ import pandas as pd
 import torch
 import torch.utils.data as data
 import numpy as np
+import os
+from datasets import PARENT_DIR
 
 
 class SpectrumS2(data.Dataset):
     def __init__(self, csv_path, transform=None):
         super(SpectrumS2, self).__init__()
         # the dataset is a tabular data of satellite spectrums from Sentinel2
-        self.data_df = pd.read_csv(csv_path)
+        self.data_df = pd.read_csv(os.path.join(PARENT_DIR, csv_path))
         self.transform = transform
         # make sure the bands are in the same order as the RTM output
         self.s2_bands = ['B02_BLUE', 'B03_GREEN', 'B04_RED', 'B05_RE1',
@@ -39,7 +41,7 @@ class SyntheticS2(data.Dataset):
     def __init__(self, csv_path, transform=None):
         super(SyntheticS2, self).__init__()
         # the dataset is a tabular data of satellite spectrums from Sentinel2
-        self.data_df = pd.read_csv(csv_path)
+        self.data_df = pd.read_csv(os.path.join(PARENT_DIR, csv_path))
         self.transform = transform
         # make sure the bands are in the same order as the RTM output
         self.s2_bands = ['B02_BLUE', 'B03_GREEN', 'B04_RED', 'B05_RE1',

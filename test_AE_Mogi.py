@@ -10,6 +10,8 @@ from parse_config import ConfigParser
 import pandas as pd
 import numpy as np
 from rtm_torch.rtm import RTM
+import os 
+CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
 def main(config):
@@ -58,8 +60,8 @@ def main(config):
         ATTRS = ['xcen', 'ycen', 'd', 'dV']
 
     analyzer = {}
-    station_info = json.load(open(
-        '/maps/ys611/ai-refined-rtm/configs/mogi/station_info.json'))
+    station_info = json.load(open(os.path.join(CURRENT_DIR,                                     
+                                               'configs/station_info.json')))
     GPS = []
     for direction in ['ux', 'uy', 'uz']:
         for station in station_info.keys():
@@ -140,10 +142,10 @@ def main(config):
     data = data.cpu().numpy()
     df = pd.DataFrame(columns=columns, data=data)
     df['date'] = analyzer['date']
-    df.to_csv(str(config.resume).split('.pth')[0]+'_testset_analyzer.csv',
+    df.to_csv(os.path.join(CURRENT_DIR, str(config.resume).split('.pth')[0]+'_testset_analyzer.csv'),
               index=False)
     logger.info('Analyzer saved to {}'.format(
-        str(config.resume).split('.pth')[0]+'_testset_analyzer.csv'
+        os.path.join(CURRENT_DIR, str(config.resume).split('.pth')[0]+'_testset_analyzer.csv')
     ))
 
 
