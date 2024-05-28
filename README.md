@@ -17,27 +17,47 @@ pip3 install -r requirements.txt
 MAGIC/
   │
   ├── train.py - main script to start training
-  ├── test_AE_Mogi.py - evaluation of trained model for $\mathbf{M}_{\mathrm{A, Mogi}}$
+  ├── test_AE_Mogi.py - evaluation of trained models for Mogi
+  ├── test_AE_RTM.py - evaluation of trained models for RTM
+  ├── test_NN_RTM.py -evaluation of trained models for RTM regressor baseline
   │
-  ├── config.json - holds configuration for training
+  ├── configs/ - holds configuration for training
+  │   ├── AE_Mogi_A.json - configuration file for training M_A_Mogi
+  │   ├── ...
+  │   ├── mogi_paras.json - learnable Mogi parameters with known ranges
+  │   ├── rtm_paras.json - learnable RTM parameters with known ranges
+  │   └── station_info.json - information of 12 GNSS stations
+  │
   ├── parse_config.py - class to handle config file and cli options
-  │
-  ├── new_project.py - initialize new project with template files
   │
   ├── base/ - abstract base classes
   │   ├── base_data_loader.py
   │   ├── base_model.py
   │   └── base_trainer.py
   │
-  ├── data_loader/ - anything about data loading goes here
+  ├── data_loader/ - data loading for both Sentinel-2 and GNSS data
   │   └── data_loaders.py
   │
   ├── data/ - default directory for storing input data
+  │   ├── processed/ - processed data ready for training and evaluation
+  │   └── raw/ - raw data 
   │
   ├── model/ - models, losses, and metrics
   │   ├── model.py
   │   ├── metric.py
   │   └── loss.py
+  │
+  ├── Mogi/ - PyTorch implementation of Mogi model
+  │   └── ...
+  │
+  ├── rtm_numpy/ - NumPy implementation of RTM model
+  │   └── ...
+  │
+  ├── rtm_torch/ - PyTorch implementation of RTM model
+  │   └── ...
+  │
+  ├── pretrained/ - pretrained models for evaluation
+  │   └── ...
   │
   ├── saved/
   │   ├── models/ - trained models are saved here
@@ -53,7 +73,7 @@ MAGIC/
   │  
   └── utils/ - small utility functions
       ├── util.py
-      └── ...
+      └── rtm_unit_test.py - unit test for the PyTorch implementation of RTM
   ```
 
 ## Training
