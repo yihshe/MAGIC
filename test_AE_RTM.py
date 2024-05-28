@@ -9,6 +9,8 @@ from parse_config import ConfigParser
 import pandas as pd
 import numpy as np
 from rtm_torch.rtm import RTM
+import os
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def main(config):
@@ -32,7 +34,7 @@ def main(config):
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
     logger.info('Loading checkpoint: {} ...'.format(config.resume))
-    checkpoint = torch.load(config.resume)
+    checkpoint = torch.load(os.path.join(CURRENT_DIR, config.resume))
     state_dict = checkpoint['state_dict']
     if config['n_gpu'] > 1:
         model = torch.nn.DataParallel(model)
@@ -108,7 +110,7 @@ def main(config):
 
     # save the analyzer to csv using pandas
     columns = []
-    for k in ['output', 'target', 'l2', 'latent']:
+    for k in ['output', 'target', 'latent']:
         if k != 'latent':
             columns += [k+'_'+b for b in S2_BANDS]
         else:
@@ -132,10 +134,11 @@ def main(config):
     df['sample_id'] = analyzer['sample_id']
     df['class'] = analyzer['class']
     df['date'] = analyzer['date']
-    df.to_csv(str(config.resume).split('.pth')[0]+'_testset_analyzer.csv',
+    df.to_csv(
+        os.path.join(CURRENT_DIR, str(config.resume).split('.pth')[0]+'_testset_analyzer.csv'),
               index=False)
     logger.info('Analyzer saved to {}'.format(
-        str(config.resume).split('.pth')[0]+'_testset_analyzer.csv'
+        os.path.join(CURRENT_DIR, str(config.resume).split('.pth')[0]+'_testset_analyzer.csv')
     ))
 
 
