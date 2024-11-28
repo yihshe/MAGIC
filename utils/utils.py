@@ -1,5 +1,6 @@
 import json
 import torch
+import torch.nn as nn
 import pandas as pd
 from pathlib import Path
 from itertools import repeat
@@ -84,3 +85,24 @@ def kldiv_normal_normal(mean1:torch.Tensor, lnvar1:torch.Tensor, mean2:torch.Ten
         return 0.5 * (d*((lnvar1-lnvar2).exp() - 1.0 + lnvar2 - lnvar1) + torch.sum((mean2-mean1).pow(2), dim=1)/lnvar2.exp())
     else:
         raise ValueError()
+    
+def actmodule(activation:str):
+    if activation == 'softplus':
+        return nn.Softplus()
+    elif activation == 'relu':
+        return nn.ReLU()
+    elif activation == 'leakyrelu':
+        return nn.LeakyReLU()
+    elif activation == 'prelu':
+        return nn.PReLU()
+    elif activation == 'elu':
+        return nn.ELU()
+    elif activation == 'tanh':
+        return nn.Tanh()
+    else:
+        raise ValueError('unknown activation function specified')
+
+def draw_normal(mean:torch.Tensor, lnvar:torch.Tensor):
+    std = torch.exp(0.5*lnvar) #TODO lnvar and reparameterization in VAE
+    eps = torch.randn_like(std) # reparametrization trick
+    return mean + eps*std

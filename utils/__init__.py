@@ -1,1 +1,2 @@
-from .util import *
+from .utils import *
+from .mlp import MLP

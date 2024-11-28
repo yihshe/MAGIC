@@ -23,7 +23,7 @@ class PhysVAETrainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
 
         # Flag for physics model usage
-        self.no_phy = config['trainer']['phys_vae']['no_phy'] # No physics model, default False
+        self.no_phy = config['arch']['phys_vae']['no_phy'] # No physics model, default False
 
         # Pretraining epochs
         self.epochs_pretrain = config['trainer']['phys_vae']['epochs_pretrain'] # default 0
