@@ -215,7 +215,7 @@ class AE_Mogi(BaseModel):
         assert hidden_dim == len(
             self.mogi_paras), "hidden_dim must be equal to the number of Mogi parameters"
         # Mean and scale for standardization of model input
-        self.device = self.device = torch.device(
+        self.device = torch.device(
             'cuda' if torch.cuda.is_available() else 'cpu')
         self.x_mean = torch.tensor(np.load(
             os.path.join(PARENT_DIR, standardization['x_mean'])
