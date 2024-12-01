@@ -33,7 +33,7 @@ def main(config):
         num_workers=2
     )
 
-    # Build model architecture and log
+    # Build model architecture and log TODO modify
     model = config.init_obj('arch', module_arch)
     logger.info(model)
 

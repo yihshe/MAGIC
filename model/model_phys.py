@@ -24,10 +24,10 @@ class Encoders(nn.Module):
         super(Encoders, self).__init__()
 
         no_phy = config['arch']['phys_vae']['no_phy']
-        num_units_feat = config['arch']['phys_vae']['num_units_feat']#128
         dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2']#2
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy']#7 for RTM, 4 for Mogi
         activation = config['arch']['phys_vae']['activation'] #TODO same as galaxy for gaussian sampling
+        num_units_feat = config['arch']['phys_vae']['num_units_feat']#128
         
         self.func_feat = FeatureExtractor(config)
 
@@ -52,7 +52,7 @@ class Decoders(nn.Module):
         activation = config['arch']['phys_vae']['activation'] #elu TODO relu or elu?
         no_phy = config['arch']['phys_vae']['no_phy']
         x_lnvar = config['trainer']['phys_vae']['x_lnvar'] #TODO not sure how its value is set exactly
-
+        
         self.register_buffer('param_x_lnvar', torch.ones(1)*x_lnvar)
 
         if not no_phy:

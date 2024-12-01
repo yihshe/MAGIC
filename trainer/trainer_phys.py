@@ -28,8 +28,13 @@ class PhysVAETrainer(BaseTrainer):
         # Pretraining epochs
         self.epochs_pretrain = config['trainer']['phys_vae']['epochs_pretrain'] # default 0
 
+        # Number of physical variables
+        self.dim_z_phy = config['arch']['phys_vae']['dim_z_phy'] #7 for RTM, 4 for Mogi
+
         # Phys-VAE specific configurations
-        # TODO check the weight used for KL divergence in general
+        # TODO check the weight used for KL divergence in general: 1) weight extremely small, same as AE? 
+        # 2) we have already applied a physical range as a prior, what we learn is a unit vector
+        # 3) the physical model is determinstic, then whether variational is necessary or not.
         self.kl_loss_weight = config['trainer']['phys_vae']['balance_kld'] + config['trainer']['phys_vae']['balance_lact_enc'] 
         self.unmix_loss_weight = config['trainer']['phys_vae']['balance_unmix']
         self.synthetic_data_loss_weight = config['trainer']['phys_vae']['balance_data_aug']
@@ -99,7 +104,7 @@ class PhysVAETrainer(BaseTrainer):
                 # Pretraining phase, not used in default setting
                 loss = self.synthetic_data_loss_weight * synthetic_data_loss
             else:
-                # Training phase
+                # Training phase TODO loss weights TBD
                 loss = rec_loss \
                     + self.kl_loss_weight * kl_loss * x_var.detach() \
                     + self.unmix_loss_weight * unmix_loss \
@@ -198,7 +203,7 @@ class PhysVAETrainer(BaseTrainer):
         
         KL_z_aux2 = kldiv_normal_normal(z_aux2_stat['mean'], z_aux2_stat['lnvar'],
             prior_z_aux2_stat['mean'], prior_z_aux2_stat['lnvar']
-            ) if self.config['trainer']['dim_z_aux2'] > 0 else torch.zeros(1, device=self.device)
+            ) if self.config['arch']['phys_vae']['dim_z_aux2'] > 0 else torch.zeros(1, device=self.device)
         
         kl_loss = (KL_z_phy + KL_z_aux2).mean()
 
@@ -227,20 +232,11 @@ class PhysVAETrainer(BaseTrainer):
         if not self.no_phy:
             self.model.eval()
             with torch.no_grad():
-                # TODO this is a placeholder for the actual physics model
-                synthetic_z_phy = torch.cat([
-                    torch.rand((batch_size, 1), device=self.device) * (self.config['range_I0'][1] - self.config['range_I0'][0]) + self.config['range_I0'][0],
-                    torch.rand((batch_size, 1), device=self.device) * (self.config['range_A'][1] - self.config['range_A'][0]) + self.config['range_A'][0],
-                    torch.rand((batch_size, 1), device=self.device) * (self.config['range_e'][1] - self.config['range_e'][0]) + self.config['range_e'][0],
-                    torch.rand((batch_size, 1), device=self.device) * (self.config['range_theta'][1] - self.config['range_theta'][0]) + self.config['range_theta'][0],
-                ], dim=1)
-
+                synthetic_z_phy = torch.rand((batch_size, self.dim_z_phy), device=self.device) # Generate synthetic data in the unit scale
                 synthetic_y = self.model.generate_physonly(synthetic_z_phy)  # Simulated physics-only signal
             self.model.train()
-            # TODO size of synthetic_y, feature also need to be normalised? 
             synthetic_features = self.model.enc.func_feat(synthetic_y)
             inferred_z_phy = self.model.enc.func_z_phy_mean(synthetic_features)
-            # NOTE TBD: keep the same unit scale for latent variables?
             return torch.mean((inferred_z_phy - synthetic_z_phy) ** 2)  # Regularization term
         else:
             return torch.zeros(1, device=self.device)
