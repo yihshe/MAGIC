@@ -1,5 +1,5 @@
 {
-    "name": "PHYS_VAE_RTM_C",
+    "name": "PHYS_VAE_RTM_B",
     "n_gpu": 1,
     "arch": {
         "type": "PHYS_VAE_RTM",
@@ -14,7 +14,7 @@
         },
         "phys_vae": {
             "no_phy": false,
-            "dim_z_aux2": 2,
+            "dim_z_aux2": -1,
             "dim_z_phy": 7,
             "activation": "relu",
             "num_units_feat": 128,
