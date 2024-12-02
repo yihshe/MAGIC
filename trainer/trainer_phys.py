@@ -178,7 +178,7 @@ class PhysVAETrainer(BaseTrainer):
                 self.valid_metrics.update('kl_loss', kl_loss.item())
 
         # Log the validation metrics
-        self.logger.info(f"Validation Epoch: {epoch} Rec Loss: 
+        self.logger.info(f"Validation Epoch: {epoch} Rec Loss: \
                          {rec_loss.item():.6f} KL Loss: {kl_loss.item():.6f}")
 
         return self.valid_metrics.result()

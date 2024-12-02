@@ -169,7 +169,7 @@ class PHYS_VAE_RTM(nn.Module):
                 expanded = self.dec.func_aux2_expand(torch.cat([z_phy, z_aux2], dim=1))
                 x_PB = self.dec.func_aux2_map(torch.cat([x_P, expanded], dim=1))
             else:
-                x_PB = x_P.clone() # No correction if no auxiliary variables
+                x_PB = x_P.clone() # No correction if no auxiliary variables (dim_z_aux2 = -1)
         else:
             # no physics 
             y = torch.zeros(z_phy.shape[0], self.in_channels)

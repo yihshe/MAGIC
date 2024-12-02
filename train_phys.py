@@ -7,6 +7,7 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
+from model import PHYS_VAE_RTM  # Updated model for Phys-VAE
 from parse_config import ConfigParser
 from trainer import PhysVAETrainer  # Updated trainer for Phys-VAE
 from utils import prepare_device
@@ -33,8 +34,9 @@ def main(config):
         num_workers=2
     )
 
-    # Build model architecture and log TODO modify
-    model = config.init_obj('arch', module_arch)
+    # Build model architecture and log 
+    # model = config.init_obj('arch', module_arch)
+    model = model_init(config)
     logger.info(model)
 
     # Prepare for (multi-device) GPU training
@@ -64,6 +66,12 @@ def main(config):
     )
 
     trainer.train()
+
+def model_init(config:dict):
+    if config["arch"]["type"] == "PHYS_VAE_RTM":
+        return PHYS_VAE_RTM(config)
+    elif config["arch"]["type"] == "PHYS_VAE_MOGI":
+        pass
 
 
 if __name__ == '__main__':
