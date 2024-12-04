@@ -36,17 +36,18 @@ class PhysVAETrainer(BaseTrainer):
         # 2) we have already applied a physical range as a prior, what we learn is a unit vector
         # 3) the physical model is determinstic, then whether variational is necessary or not.
         self.kl_loss_weight = config['trainer']['phys_vae']['balance_kld'] + config['trainer']['phys_vae']['balance_lact_enc'] 
+        # self.kl_loss_weight = config['trainer']['phys_vae']['balance_kld'] 
         self.unmix_loss_weight = config['trainer']['phys_vae']['balance_unmix']
         self.synthetic_data_loss_weight = config['trainer']['phys_vae']['balance_data_aug']
         self.least_action_loss_weight = config['trainer']['phys_vae']['balance_lact_dec']
         
         # Metric tracker
         self.train_metrics = MetricTracker(
-            'loss', 'rec_loss', 'kl_loss', 'unmix_loss', 'physics_loss', 'synthetic_data_loss',
+            'loss', 'rec_loss', 'kl_loss', 'unmix_loss', 'syn_data_loss', 'least_act_loss',
             *[m.__name__ for m in metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker(
-            'loss', 'rec_loss', 'kl_loss', 'unmix_loss', 'physics_loss', 'synthetic_data_loss',
-            *[m.__name__ for m in metric_ftns], writer=self.writer)
+            'loss', 'kl_loss',
+            *[m.__name__ for m in metric_ftns], writer=self.writer)# loss here refers to rec_loss
 
         # define the data key and target key
         self.data_key = config['trainer']['input_key']
@@ -65,11 +66,8 @@ class PhysVAETrainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
 
-        for batch_idx, (data,) in enumerate(self.data_loader):
-            # TODO data and target for the data structure
-            # data = data_dict[self.data_key].to(self.device)
-            # target = data_dict[self.target_key].to(self.device)
-            data = data.to(self.device)
+        for batch_idx, data_dict in enumerate(self.data_loader):
+            data = data_dict[self.data_key].to(self.device)
             self.optimizer.zero_grad()
 
             # Encode step: Infer latent variables
@@ -105,12 +103,18 @@ class PhysVAETrainer(BaseTrainer):
                 loss = self.synthetic_data_loss_weight * synthetic_data_loss
             else:
                 # Training phase TODO loss weights TBD
+                # loss = rec_loss \
+                #     + self.kl_loss_weight * kl_loss * x_var.detach() \
+                #     + self.unmix_loss_weight * unmix_loss \
+                #     + self.synthetic_data_loss_weight * synthetic_data_loss \
+                #     + self.least_action_loss_weight * least_action_loss
+                
                 loss = rec_loss \
                     + self.kl_loss_weight * kl_loss * x_var.detach() \
-                    + self.unmix_loss_weight * unmix_loss \
-                    + self.synthetic_data_loss_weight * synthetic_data_loss \
-                    + self.least_action_loss_weight * least_action_loss
-            
+                    + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
+                    + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
+                    + self._loss_weight(rec_loss, least_action_loss) * least_action_loss
+                
             # Backpropagation
             loss.backward()
 
@@ -134,7 +138,7 @@ class PhysVAETrainer(BaseTrainer):
             if batch_idx % self.config['trainer']['log_step'] == 0:
                 self.logger.info(f"Train Epoch: {epoch} [{batch_idx}/{len(self.data_loader)}] "
                                  f"Loss: {loss.item():.6f} Rec Loss: {rec_loss.item():.6f} "
-                                 f"KL Loss: {kl_loss.item():.6f} Unmix Loss: {unmix_loss.item():.6f}"
+                                 f"KL Loss: {kl_loss.item():.6f} Unmix Loss: {unmix_loss.item():.6f} "
                                  f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
                                  f"Least Action Loss: {least_action_loss.item():.6f}")
 
@@ -162,9 +166,8 @@ class PhysVAETrainer(BaseTrainer):
         self.valid_metrics.reset()
 
         with torch.no_grad():
-            for batch_idx, (data,) in enumerate(self.valid_data_loader):
-                # TODO data and target for the data structure
-                # data = data_dict[self.data_key].to(self.device)
+            for batch_idx, data_dict in enumerate(self.valid_data_loader):
+                data = data_dict[self.data_key].to(self.device)
                 # target = data_dict[self.target_key].to(self.device)
                 data = data.to(self.device)
 
@@ -178,8 +181,7 @@ class PhysVAETrainer(BaseTrainer):
                 self.valid_metrics.update('kl_loss', kl_loss.item())
 
         # Log the validation metrics
-        self.logger.info(f"Validation Epoch: {epoch} Rec Loss: \
-                         {rec_loss.item():.6f} KL Loss: {kl_loss.item():.6f}")
+        self.logger.info(f"Validation Epoch: {epoch} Rec Loss: {rec_loss.item():.6f} KL Loss: {kl_loss.item():.6f}")
 
         return self.valid_metrics.result()
 
@@ -194,7 +196,7 @@ class PhysVAETrainer(BaseTrainer):
         :return: Reconstruction loss and KL divergence loss.
         """
         n = data.shape[0]
-        rec_loss = torch.sum((x-data).pow(2)).mean()
+        rec_loss = torch.sum((x-data).pow(2), dim=1).mean()
         prior_z_phy_stat, prior_z_aux2_stat = self.model.priors(n, self.device) #TODO
 
         KL_z_phy = kldiv_normal_normal(z_phy_stat['mean'], z_phy_stat['lnvar'],
@@ -218,7 +220,7 @@ class PhysVAETrainer(BaseTrainer):
         :return: Unmixing loss.
         """
         if not self.no_phy:
-            return torch.sum((unmixed - y.detach()).pow(2)).mean()
+            return torch.sum((unmixed - y.detach()).pow(2), dim=1).mean()
         else:
             return torch.zeros(1, device=self.device)
         
@@ -237,7 +239,7 @@ class PhysVAETrainer(BaseTrainer):
             self.model.train()
             synthetic_features = self.model.enc.func_feat(synthetic_y)
             inferred_z_phy = self.model.enc.func_z_phy_mean(synthetic_features)
-            return torch.mean((inferred_z_phy - synthetic_z_phy) ** 2)  # Regularization term
+            return torch.sum((inferred_z_phy - synthetic_z_phy).pow(2), dim=1).mean()  # Regularization term
         else:
             return torch.zeros(1, device=self.device)
 
@@ -250,7 +252,7 @@ class PhysVAETrainer(BaseTrainer):
         :return: Least action loss.
         """
         if not self.no_phy:
-            return torch.sum((x_PB - x_P).pow(2)).mean()
+            return torch.sum((x_PB - x_P).pow(2), dim=1).mean()
         else:
             return torch.zeros(1, device=self.device)
         
@@ -269,3 +271,18 @@ class PhysVAETrainer(BaseTrainer):
                 'epoch: {}, batch: {}, loss: {}, stablize count: {}'.format(
                     epoch, batch_idx, loss, self.stablize_count)
             )
+
+    def _loss_weight(self, rec_loss, reg_loss):
+        """
+        Compute the weighted loss so that the reg_loss is always one order of magnitude smaller than rec_loss.
+
+        :param rec_loss: Reconstruction loss.
+        :param reg_loss: Regularization loss.
+        :return: Weighted loss.
+        """
+        # Compute the magnitude of the losses
+        rec_loss_mag = 10 ** torch.floor(torch.log10(rec_loss + 1e-6))
+        reg_loss_mag = 10 ** torch.floor(torch.log10(reg_loss + 1e-6))
+        weight = rec_loss_mag / max(reg_loss_mag, 1e-6)
+        return weight.detach()/10 # One order of magnitude smaller
+

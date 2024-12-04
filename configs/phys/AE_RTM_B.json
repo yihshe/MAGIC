@@ -16,14 +16,15 @@
             "no_phy": false,
             "dim_z_aux2": -1,
             "dim_z_phy": 7,
-            "activation": "relu",
-            "num_units_feat": 128,
+            "activation": "elu",
+            "hidlayers_feat": [
+                32
+            ],
+            "num_units_feat": 64,
             "hidlayers_aux2_enc": [
-                64,
                 32
             ],
             "hidlayers_z_phy": [
-                64,
                 32
             ],
             "x_lnvar": -10.0
@@ -36,7 +37,7 @@
             "batch_size": 64,
             "shuffle": true,
             "validation_split": 0.0,
-            "num_workers": 2
+            "num_workers": 0
         },
         "data_dir_valid": "data/processed/rtm/real/valid.csv",
         "data_dir_test": "data/processed/rtm/real/test.csv"
@@ -73,7 +74,8 @@
         "wandb": false,
         "phys_vae": {
             "epochs_pretrain": 0,
-            "balance_kld": 0.1,
+            "x_lnvar": -9.0,
+            "balance_kld": 1.0,
             "balance_lact_enc": 0.1,
             "balance_unmix": 0.1,
             "balance_data_aug": 0.1,
