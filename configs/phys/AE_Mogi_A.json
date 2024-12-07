@@ -1,25 +1,26 @@
 {
-    "name": "PHYS_VAE_RTM_A",
+    "name": "PHYS_VAE_Mogi_A",
     "n_gpu": 1,
     "arch": {
         "type": "PHYS_VAE",
         "args": {
-            "physics": "RTM",
-            "input_dim": 11,
-            "hidden_dim": 7,
-            "rtm_paras": "configs/rtm_paras.json",
+            "physics": "Mogi",
+            "input_dim": 36,
+            "hidden_dim": 4,
+            "mogi_paras": "configs/mogi_paras.json",
+            "station_info": "configs/station_info.json",
             "standardization": {
-                "x_mean": "data/processed/rtm/real/train_x_mean.npy",
-                "x_scale": "data/processed/rtm/real/train_x_scale.npy"
+                "x_mean": "data/processed/mogi/train_x_mean.npy",
+                "x_scale": "data/processed/mogi/train_x_scale.npy"
             }
         },
         "phys_vae": {
             "no_phy": true,
-            "dim_z_aux2": 9,
-            "dim_z_phy": 7,
+            "dim_z_aux2": 6,
+            "dim_z_phy": 4,
             "activation": "elu",
             "hidlayers_feat": [
-                64
+                32
             ],
             "num_units_feat": 64,
             "hidlayers_aux2_enc": [
@@ -31,26 +32,28 @@
         }
     },
     "data_loader": {
-        "type": "SpectrumS2DataLoader",
+        "type": "GPSSeqDataLoader",
+        "type_test": "GPSDataLoader",
         "args": {
-            "data_dir": "data/processed/rtm/real/train.csv",
-            "batch_size": 64,
+            "data_dir": "data/processed/mogi/train.csv",
+            "batch_size": 12,
             "shuffle": true,
             "validation_split": 0.0,
             "num_workers": 0
         },
-        "data_dir_valid": "data/processed/rtm/real/valid.csv",
-        "data_dir_test": "data/processed/rtm/real/test.csv"
+        "data_dir_valid": "data/processed/mogi/valid.csv",
+        "data_dir_test": "data/processed/mogi/test.csv"
     },
     "optimizer": {
         "type": "Adam",
         "args": {
             "lr": 0.001,
-            "weight_decay": 0.0001,
+            "weight_decay": 1e-4,
             "amsgrad": true
         }
     },
-    "loss": "mse_loss",
+    "loss": "mse_loss_mogi_reg",
+    "loss_test": "mse_loss",
     "metrics": [],
     "lr_scheduler": {
         "type": "StepLR",
@@ -61,14 +64,14 @@
     },
     "trainer": {
         "epochs": 100,
-        "save_dir": "saved/rtm",
+        "save_dir": "saved/mogi",
         "save_period": 10,
         "log_step": 5,
         "verbosity": 2,
         "monitor": "min val_loss",
         "early_stop": 10,
-        "input_key": "spectrum",
-        "output_key": "spectrum",
+        "input_key": "displacement",
+        "output_key": "displacement",
         "stablize_grad": true,
         "tensorboard": false,
         "wandb": false,

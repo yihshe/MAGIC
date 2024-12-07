@@ -2,8 +2,9 @@
     "name": "PHYS_VAE_RTM_B",
     "n_gpu": 1,
     "arch": {
-        "type": "PHYS_VAE_RTM",
+        "type": "PHYS_VAE",
         "args": {
+            "physics": "RTM",
             "input_dim": 11,
             "hidden_dim": 7,
             "rtm_paras": "configs/rtm_paras.json",
@@ -26,8 +27,7 @@
             ],
             "hidlayers_z_phy": [
                 32
-            ],
-            "x_lnvar": -10.0
+            ]
         }
     },
     "data_loader": {

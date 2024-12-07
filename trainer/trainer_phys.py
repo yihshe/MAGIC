@@ -43,7 +43,7 @@ class PhysVAETrainer(BaseTrainer):
         
         # Metric tracker
         self.train_metrics = MetricTracker(
-            'loss', 'rec_loss', 'kl_loss', 'unmix_loss', 'syn_data_loss', 'least_act_loss',
+            'loss', 'rec_loss', 'kl_loss', 'unmix_loss', 'syn_data_loss', 'least_act_loss', 'smoothness_loss',
             *[m.__name__ for m in metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker(
             'loss', 'kl_loss',
@@ -65,9 +65,17 @@ class PhysVAETrainer(BaseTrainer):
         """
         self.model.train()
         self.train_metrics.reset()
+        
+        # Sequence length, for the 'GPSSeqDataLoader' used in Mogi model
+        seqence_len = None
 
         for batch_idx, data_dict in enumerate(self.data_loader):
             data = data_dict[self.data_key].to(self.device)
+
+            if data.dim() == 3:
+                seqence_len = data.size(1)
+                data = data.view(-1, data.size(-1))
+
             self.optimizer.zero_grad()
 
             # Encode step: Infer latent variables
@@ -83,7 +91,6 @@ class PhysVAETrainer(BaseTrainer):
             x_var = torch.exp(x_lnvar)
 
             # Loss calculations
-            # TODO whether data and x_PB need to be rescaled 
             # ELBO loss
             rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux2_stat, x_PB)
             
@@ -93,8 +100,11 @@ class PhysVAETrainer(BaseTrainer):
             # Synthetic data regularization (R_{DA,2})
             synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
 
-            # Least action regularization (R_{ppc}) NOTE: until here
+            # Least action regularization (R_{ppc}) 
             least_action_loss = self._least_action_loss(x_PB, x_P) 
+
+            # Sequence smoothness regularization (for Mogi model)
+            smoothness_loss = self._sequence_smoothness_loss(x_P, seqence_len)
 
             
             # Total loss 
@@ -113,7 +123,8 @@ class PhysVAETrainer(BaseTrainer):
                     + self.kl_loss_weight * kl_loss * x_var.detach() \
                     + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
                     + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
-                    + self._loss_weight(rec_loss, least_action_loss) * least_action_loss
+                    + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
+                    + self._loss_weight(rec_loss, smoothness_loss) * smoothness_loss
                 
             # Backpropagation
             loss.backward()
@@ -133,6 +144,7 @@ class PhysVAETrainer(BaseTrainer):
             self.train_metrics.update('unmix_loss', unmix_loss.item())
             self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
             self.train_metrics.update('least_act_loss', least_action_loss.item())
+            self.train_metrics.update('smoothness_loss', smoothness_loss.item())
 
             # Logging
             if batch_idx % self.config['trainer']['log_step'] == 0:
@@ -140,7 +152,8 @@ class PhysVAETrainer(BaseTrainer):
                                  f"Loss: {loss.item():.6f} Rec Loss: {rec_loss.item():.6f} "
                                  f"KL Loss: {kl_loss.item():.6f} Unmix Loss: {unmix_loss.item():.6f} "
                                  f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
-                                 f"Least Action Loss: {least_action_loss.item():.6f}")
+                                 f"Least Action Loss: {least_action_loss.item():.6f}"
+                                 f"Smoothness Loss: {smoothness_loss.item():.6f}")
 
         log = self.train_metrics.result()
 
@@ -169,6 +182,9 @@ class PhysVAETrainer(BaseTrainer):
             for batch_idx, data_dict in enumerate(self.valid_data_loader):
                 data = data_dict[self.data_key].to(self.device)
                 # target = data_dict[self.target_key].to(self.device)
+                if data.dim() == 3:
+                    data = data.view(-1, data.size(-1))
+                    
                 data = data.to(self.device)
 
                 z_phy_stat, z_aux2_stat, x, _ = self.model(data)
@@ -255,7 +271,21 @@ class PhysVAETrainer(BaseTrainer):
             return torch.sum((x_PB - x_P).pow(2), dim=1).mean()
         else:
             return torch.zeros(1, device=self.device)
-        
+    
+    def _sequence_smoothness_loss(self, x_P, seqence_len=None):
+        """
+        Compute the smoothness regularization loss for a sequence.
+
+        :param x_P: Predicted physics-only signal.
+        :param seqence_len: Length of the sequence.
+        :return: Smoothness loss.
+        """
+        if not self.no_phy and seqence_len is not None:
+            x_P_reshaped = x_P.view(-1, seqence_len, x_P.size(-1))
+            diff = x_P_reshaped[:, 1:, :] - x_P_reshaped[:, :-1, :]
+            return torch.sum(diff**2, dim=(1, 2)).mean()
+        else:
+            return torch.zeros(1, device=self.device)
 
     def _grad_stablizer(self, epoch, batch_idx, loss):
         para_grads = [v.grad.data for v in self.model.parameters(

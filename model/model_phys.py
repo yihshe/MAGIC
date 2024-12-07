@@ -23,6 +23,7 @@ class Encoders(nn.Module):
     def __init__(self, config:dict):
         super(Encoders, self).__init__()
 
+        in_channels = config['arch']['args']['input_dim'] #11 for RTM, 36 for Mogi
         no_phy = config['arch']['phys_vae']['no_phy']
         dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2']#2
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy']#7 for RTM, 4 for Mogi
@@ -38,7 +39,7 @@ class Encoders(nn.Module):
 
         if not no_phy:
             hidlayers_z_phy = config['arch']['phys_vae']['hidlayers_z_phy'] #[64, 32]
-            self.func_unmixer_coeff = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation), nn.Tanh())
+            self.func_unmixer_coeff = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[in_channels,], activation), nn.Tanh())
             self.func_z_phy_mean = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation), nn.Softplus()) 
             self.func_z_phy_lnvar = MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation) 
 
@@ -82,9 +83,9 @@ class FeatureExtractor(nn.Module):
         return self.func_feat(x) #n*128 
 
 
-class Physics(nn.Module):
+class Physics_RTM(nn.Module):
     def __init__(self, config:dict):
-        super(Physics, self).__init__()
+        super(Physics_RTM, self).__init__()
         # TODO implement for Mogi
         self.model = RTM()
         self.z_phy_ranges = json.load(open(os.path.join(PARENT_DIR, config['arch']['args']['rtm_paras']), 'r'))
@@ -120,9 +121,58 @@ class Physics(nn.Module):
         output = self.model.run(**z_phy_rescaled)[:, self.bands_index]
         return (output - self.x_mean) / self.x_scale 
 
-class PHYS_VAE_RTM(nn.Module):
+class Physics_Mogi(nn.Module):
     def __init__(self, config:dict):
-        super(PHYS_VAE_RTM, self).__init__()
+        super(Physics_Mogi, self).__init__()
+
+        self.z_phy_ranges = json.load(open(os.path.join(PARENT_DIR, config['arch']['args']['mogi_paras']), 'r'))
+        self.station_info = json.load(open(os.path.join(PARENT_DIR, config['arch']['args']['station_info']), 'r'))
+        
+        x = torch.tensor([self.station_info[k]['xE']
+                         for k in self.station_info.keys()])*1000  # m
+        y = torch.tensor([self.station_info[k]['yN']
+                         for k in self.station_info.keys()])*1000  # m
+        self.model = Mogi(x,y)
+        
+        # Mean and scale for standardization
+        self.x_mean = torch.tensor(
+            np.load(os.path.join(PARENT_DIR,config['arch']['args']['standardization']['x_mean']))
+            ).float().unsqueeze(0).to(DEVICE)
+        self.x_scale = torch.tensor(
+            np.load(os.path.join(PARENT_DIR, config['arch']['args']['standardization']['x_scale']))
+            ).float().unsqueeze(0).to(DEVICE)
+    
+    def rescale(self, z_phy:torch.Tensor):
+        """
+        Rescale the output of the encoder to the physical parameters in the original scale
+        """
+        z_phy_rescaled = {}
+        for i, para_name in enumerate(self.z_phy_ranges.keys()):
+            min = self.z_phy_ranges[para_name]['min']
+            max = self.z_phy_ranges[para_name]['max']
+            # if x shape is (batch, sequence, feature), then x[:,:,i] is the i-th feature
+            if len(z_phy.shape) == 3:
+                z_phy_rescaled[para_name] = z_phy[:, :, i]*(max-min)+min
+            else:
+                z_phy_rescaled[para_name] = z_phy[:, i]*(max-min)+min
+
+            if para_name in ['xcen', 'ycen', 'd']:
+                z_phy_rescaled[para_name] = z_phy_rescaled[para_name]*1000
+
+        z_phy_rescaled['dV'] = z_phy_rescaled['dV'] * \
+            torch.pow(10, torch.tensor(5)) - torch.pow(10, torch.tensor(7))
+
+        
+        return z_phy_rescaled
+    
+    def forward(self, z_phy:torch.Tensor):
+        z_phy_rescaled = self.rescale(z_phy)
+        output = self.model.run(**z_phy_rescaled)[:, self.bands_index]
+        return (output - self.x_mean) / self.x_scale 
+
+class PHYS_VAE(nn.Module):
+    def __init__(self, config:dict):
+        super(PHYS_VAE, self).__init__()
 
         self.no_phy = config['arch']['phys_vae']['no_phy']
         self.dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2']
@@ -137,7 +187,16 @@ class PHYS_VAE_RTM(nn.Module):
         self.enc = Encoders(config)
 
         # Physics
-        self.physics_model = Physics(config) 
+        # self.physics_model = Physics(config) 
+        self.physics_model = self.physics_init(config)
+    
+    def physics_init(self, config:dict):
+        if config['arch']['args']['physics'] == 'RTM':
+            return Physics_RTM(config)
+        elif config['arch']['args']['physics'] == 'Mogi':
+            return Physics_Mogi(config)
+        else:
+            raise ValueError("Unknown model type")
 
     def priors(self, n:int, device:torch.device):
         prior_z_phy_mean = torch.cat([
@@ -161,8 +220,7 @@ class PHYS_VAE_RTM(nn.Module):
     def decode(self, z_phy:torch.Tensor, z_aux2:torch.Tensor, full:bool=False):
         if not self.no_phy:
             # with physics
-            z_phy_rescaled = self.rescale(z_phy)
-            y = self.physics_model(z_phy_rescaled) # (n, in_channels)
+            y = self.physics_model(z_phy) # (n, in_channels)
             # x_P = y.repeat(1,3,1,1)
             x_P = y
             if self.dim_z_aux2 >= 0:
@@ -226,13 +284,19 @@ class PHYS_VAE_RTM(nn.Module):
         return z_phy, z_aux2
 
 
-    def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False):
+    def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False,
+                inference:bool=False):
         z_phy_stat, z_aux2_stat, unmixed, = self.encode(x)
 
         if not reconstruct:
             return z_phy_stat, z_aux2_stat
+        
+        if not inference:
+            # draw & reconstruction
+            x_mean, x_lnvar = self.decode(*self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z), full=False)
 
-        # draw & reconstruction
-        x_mean, x_lnvar = self.decode(*self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z), full=False)
-
-        return z_phy_stat, z_aux2_stat, x_mean, x_lnvar
+            return z_phy_stat, z_aux2_stat, x_mean, x_lnvar
+        else:
+            z_phy, z_aux2 = self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z)
+            x_PB, x_P, x_lnvar, y = self.decode(z_phy, z_aux2, full=True)
+            return z_phy, z_aux2, x_PB, x_P

@@ -5,7 +5,7 @@ import data_loader.data_loaders as module_data
 import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
-from model import PHYS_VAE_RTM, model_init  # TODO modify for Phys-VAE
+from model import PHYS_VAE  # TODO modify for Phys-VAE
 from parse_config import ConfigParser
 import pandas as pd
 import numpy as np
@@ -29,7 +29,8 @@ def main(config):
 
     # build model architecture
     # model = config.init_obj('arch', module_arch)
-    model = model_init(config)
+    # model = model_init(config)
+    model = PHYS_VAE(config)
     logger.info(model)
 
     # get function handles of loss and metrics
