@@ -167,7 +167,7 @@ class Physics_Mogi(nn.Module):
     
     def forward(self, z_phy:torch.Tensor):
         z_phy_rescaled = self.rescale(z_phy)
-        output = self.model.run(**z_phy_rescaled)[:, self.bands_index]
+        output = self.model.run(**z_phy_rescaled)
         return (output - self.x_mean) / self.x_scale 
 
 class PHYS_VAE(nn.Module):

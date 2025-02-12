@@ -32,11 +32,11 @@
         }
     },
     "data_loader": {
-        "type": "GPSSeqDataLoader",
+        "type": "GPSDataLoader",
         "type_test": "GPSDataLoader",
         "args": {
             "data_dir": "data/processed/mogi/train.csv",
-            "batch_size": 12,
+            "batch_size": 64,
             "shuffle": true,
             "validation_split": 0.0,
             "num_workers": 0

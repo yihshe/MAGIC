@@ -1,5 +1,5 @@
 {
-    "name": "PHYS_VAE_Mogi_B",
+    "name": "PHYS_VAE_Mogi_B_seq",
     "n_gpu": 1,
     "arch": {
         "type": "PHYS_VAE",

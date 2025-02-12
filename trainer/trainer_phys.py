@@ -91,7 +91,7 @@ class PhysVAETrainer(BaseTrainer):
             x_var = torch.exp(x_lnvar)
 
             # Loss calculations
-            # ELBO loss
+            # ELBO loss #TODO element-wise loss, not sample-wise
             rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux2_stat, x_PB)
             
             # Unmixing regularization (R_{DA,1})
@@ -124,7 +124,8 @@ class PhysVAETrainer(BaseTrainer):
                     + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
                     + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
                     + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
-                    + self._loss_weight(rec_loss, smoothness_loss) * smoothness_loss
+                    + 0.01 * smoothness_loss
+                    # + self._loss_weight(rec_loss, smoothness_loss) * smoothness_loss
                 
             # Backpropagation
             loss.backward()
@@ -152,7 +153,7 @@ class PhysVAETrainer(BaseTrainer):
                                  f"Loss: {loss.item():.6f} Rec Loss: {rec_loss.item():.6f} "
                                  f"KL Loss: {kl_loss.item():.6f} Unmix Loss: {unmix_loss.item():.6f} "
                                  f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
-                                 f"Least Action Loss: {least_action_loss.item():.6f}"
+                                 f"Least Action Loss: {least_action_loss.item():.6f} "
                                  f"Smoothness Loss: {smoothness_loss.item():.6f}")
 
         log = self.train_metrics.result()
@@ -283,7 +284,7 @@ class PhysVAETrainer(BaseTrainer):
         if not self.no_phy and seqence_len is not None:
             x_P_reshaped = x_P.view(-1, seqence_len, x_P.size(-1))
             diff = x_P_reshaped[:, 1:, :] - x_P_reshaped[:, :-1, :]
-            return torch.sum(diff**2, dim=(1, 2)).mean()
+            return torch.mean(diff**2)
         else:
             return torch.zeros(1, device=self.device)
 

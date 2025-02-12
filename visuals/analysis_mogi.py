@@ -82,27 +82,26 @@ BASE_PATH = '/maps/ys611/MAGIC/saved/mogi/models/'
 # TODO add comparison results for wosmooth case in appendix
 # BASE_PATH = '/maps/ys611/ai-refined-rtm/saved/mogi/models/AE_Mogi_corr/0509_103248_wosmooth'
 
-CSV_PATH0 = os.path.join(
-    BASE_PATH, 'PHYS_VAE_Mogi_C/1208_182046', 
-    'model_best_testset_analyzer_test.csv'
+CSV_PATH0 = os.path.join( 
+    BASE_PATH, 'PHYS_VAE_Mogi_C_seq/1210_094000',
+    'model_best_testset_analyzer.csv'
 )
 CSV_PATH1 = os.path.join(
-    BASE_PATH, 'PHYS_VAE_Mogi_B/1208_181936',
-    'model_best_testset_analyzer_test.csv'
+    BASE_PATH, 'PHYS_VAE_Mogi_B_seq/1210_093812',
+    'model_best_testset_analyzer.csv'
 )
 
 # BASE_PATH = '/maps/ys611/ai-refined-rtm/saved/mogi/models/AE_Mogi_corr/0509_103248_wosmooth'
-CSV_PATH3 = os.path.join(
-    BASE_PATH, 'PHYS_VAE_Mogi_C/1208_181105_seq',
-    'model_best_testset_analyzer_test.csv'
-)
+# CSV_PATH3 = os.path.join(
+#     BASE_PATH, 'PHYS_VAE_Mogi_C/1208_181105_seq',
+#     'model_best_testset_analyzer_test.csv'
+# )
 
 df0 = recale_output(pd.read_csv(CSV_PATH0), MEAN, SCALE)
 df1 = recale_output(pd.read_csv(CSV_PATH1), MEAN, SCALE, corr=False) 
-df2 = recale_output(pd.read_csv(CSV_PATH3), MEAN, SCALE)
+# df2 = recale_output(pd.read_csv(CSV_PATH3), MEAN, SCALE)
 
-SAVE_PATH = os.path.join(BASE_PATH, 'PHYS_VAE_Mogi_C/1208_182046', 
-                         'plots')
+SAVE_PATH = os.path.join(BASE_PATH, 'PHYS_VAE_Mogi_C_seq/1210_094000', 'plots')
 if not os.path.exists(SAVE_PATH):
     os.makedirs(SAVE_PATH)
 
@@ -169,8 +168,9 @@ for direction in ['uz']:
 
 # %% Plot the line scatter for the output and target of each GPS
 # NOTE neurips full plot
-df = df2
-color = 'blue'
+df = df1
+color = 'red'
+# color = 'blue'
 ylabel = '$X_{\mathrm{GPS, C}}$'
 for direction in ['ux', 'uy', 'uz']:
     fig, axs = plt.subplots(3, 4, figsize=(24, 16))
@@ -211,7 +211,7 @@ for direction in ['ux', 'uy', 'uz']:
         ax.legend([f'$R^2$: {r2:.3f}'], fontsize=24)
     plt.tight_layout()
     plt.savefig(
-        os.path.join(SAVE_PATH, f'{direction}_output_target_corr.png'))
+        os.path.join(SAVE_PATH, f'{direction}_output_target_wocorr.png'))
     plt.show()
 
 # %% plot the histogram of the four variables
