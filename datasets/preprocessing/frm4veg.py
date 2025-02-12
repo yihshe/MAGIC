@@ -24,11 +24,9 @@ LAI_COL = "LAI"               # Total (true) LAI; typically the sum of LAI_down 
 LCC_COL = "LCC (g m-2)"
 CCC_COL = "CCC (g m-2)"
 
-# Sentinel-2 SAFE folders for two available dates:
-S2_1_DATE_STR = "2018-06-29"    # first acquisition date
-S2_2_DATE_STR = "2018-07-06"    # second acquisition date
-S2_1_SAFE = "S2A_MSIL2A_20180629T112111_N0500_R037_T30UXC_20230828T055820.SAFE"
-S2_2_SAFE = "S2A_MSIL2A_20180706T110918_...SAFE"  # Replace with the actual folder name
+# Sentinel-2 SAFE folder for the available date:
+S2_DATE_STR = "2018-06-29"    # acquisition date
+S2_SAFE = "S2A_MSIL2A_20180629T112111_N0500_R037_T30UXC_20230828T055820.SAFE"
 
 # List of bands to extract.
 # The tuple for each band contains a file-matching pattern and its native resolution.
@@ -123,33 +121,24 @@ df = df.dropna(subset=[LAT_COL, LON_COL])
 df[DATE_COL] = pd.to_datetime(df[DATE_COL], format="%d/%m/%y", errors="coerce")
 
 # -------------------------------------------------------------------
-# 4. PREPARE SENTINEL-2 DATA FOR BOTH DATES (Downsampled to 20 m)
+# 4. PREPARE SENTINEL-2 DATA (Downsampled to 20 m)
 # -------------------------------------------------------------------
-# 4.1. Find band files in each SAFE folder
-band_files_1 = find_band_files(S2_1_SAFE, S2_BANDS)
-band_files_2 = find_band_files(S2_2_SAFE, S2_BANDS)
+# 4.1. Find band files in the SAFE folder
+band_files = find_band_files(S2_SAFE, S2_BANDS)
 
 # 4.2. Resample each band to 20 m resolution.
-s2_date_1 = datetime.strptime(S2_1_DATE_STR, "%Y-%m-%d")
-s2_date_2 = datetime.strptime(S2_2_DATE_STR, "%Y-%m-%d")
+s2_date = datetime.strptime(S2_DATE_STR, "%Y-%m-%d")
 
-arrays_1 = {}  # band_name -> (array, transform, crs)
-arrays_2 = {}
+arrays = {}  # band_name -> (array, transform, crs)
 
-for b_name, (jp2_1, native_res) in band_files_1.items():
-    arr_1, tfm_1, crs_1 = resample_band(jp2_1, TARGET_RES)
-    arrays_1[b_name] = (arr_1, tfm_1, crs_1)
-    
-    # For the second date:
-    jp2_2, _ = band_files_2[b_name]
-    arr_2, tfm_2, crs_2 = resample_band(jp2_2, TARGET_RES)
-    arrays_2[b_name] = (arr_2, tfm_2, crs_2)
+for b_name, (jp2, native_res) in band_files.items():
+    arr, tfm, crs = resample_band(jp2, TARGET_RES)
+    arrays[b_name] = (arr, tfm, crs)
 
 # -------------------------------------------------------------------
-# 5. EXTRACT SPECTRAL VALUES FOR EACH ESU (using the Closest Date)
+# 5. EXTRACT SPECTRAL VALUES FOR EACH ESU
 # -------------------------------------------------------------------
-# For each ESU, we decide which Sentinel-2 date is closer to the measurement date.
-# Then, for each band, we sample the pixel at the ESU center.
+# For each ESU, we sample the pixel at the ESU center.
 for b_name in S2_BANDS.keys():
     df[b_name] = np.nan  # prepare a column for each band
 
@@ -162,19 +151,9 @@ for idx, row in df.iterrows():
     if pd.isnull(T_meas):
         continue
     
-    # Compute absolute differences (in days) from each satellite date.
-    dt1 = abs((T_meas - s2_date_1).days)
-    dt2 = abs((T_meas - s2_date_2).days)
-    
-    # Choose the dataset from the closest date.
-    if dt1 <= dt2:
-        chosen_set = arrays_1
-    else:
-        chosen_set = arrays_2
-    
     # For each band, extract the pixel value.
     for b_name in S2_BANDS.keys():
-        arr, tfm, crs = chosen_set[b_name]
+        arr, tfm, crs = arrays[b_name]
         df.at[idx, b_name] = get_pixel_value(lat, lon, arr, tfm, crs)
 
 # -------------------------------------------------------------------
