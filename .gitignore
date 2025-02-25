@@ -113,6 +113,7 @@ ENV/
 input/
 saved/
 wandb/
+data/raw/Wytham
 .nfs00000000017f6ee30001c665
 # datasets/
 
