@@ -5,6 +5,7 @@ temp.py
 visuals/histogram_temp.py
 visuals/3dplots/
 visuals/allometry/
+run.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -114,6 +115,8 @@ input/
 saved/
 wandb/
 data/raw/Wytham
+
+# Redundant files
 .nfs00000000017f6ee30001c665
 # datasets/
 

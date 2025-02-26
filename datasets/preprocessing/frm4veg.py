@@ -12,13 +12,13 @@ from openpyxl import load_workbook
 # 1. USER SETTINGS
 # -------------------------------------------------------------------
 # Path to the Excel file with in-situ ESU measurements
-EXCEL_FILE = "FRM_Veg_Wytham_20180703_V2.xlsx"
+EXCEL_FILE = "/maps-priv/maps/ys611/MAGIC/data/raw/Wytham/FRM4Veg/FRM_Veg_Wytham_20180703_V2.xlsx"
 IN_SITU_SHEET = "GroundData"
 
 # Column names in the Excel file
 # (For Wytham these columns are in lat/lon even if labeled "Northing Coord." / "Easting Coord.")
-LAT_COL = "Northing Coord."   # should be ~51.77
-LON_COL = "Easting Coord."    # should be ~-1.33
+LAT_COL = "Northing Coord. "   # should be ~51.77
+LON_COL = "Easting Coord. "    # should be ~-1.33
 DATE_COL = "Date (dd/mm/yyyy)" # measurement date (e.g. "3/7/18")
 LAI_COL = "LAI"               # Total (true) LAI; typically the sum of LAI_down and LAI_up
 LCC_COL = "LCC (g m-2)"
@@ -26,7 +26,7 @@ CCC_COL = "CCC (g m-2)"
 
 # Sentinel-2 SAFE folder for the available date:
 S2_DATE_STR = "2018-06-29"    # acquisition date
-S2_SAFE = "S2A_MSIL2A_20180629T112111_N0500_R037_T30UXC_20230828T055820.SAFE"
+S2_SAFE = "/maps-priv/maps/ys611/MAGIC/data/raw/Wytham/FRM4Veg/S2A_MSIL2A_20180629T112111_N0500_R037_T30UXC_20230828T055820.SAFE"
 
 # List of bands to extract.
 # The tuple for each band contains a file-matching pattern and its native resolution.
