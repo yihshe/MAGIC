@@ -114,7 +114,7 @@ ENV/
 input/
 saved/
 wandb/
-data/raw/Wytham
+data/raw/wytham
 
 # Redundant files
 .nfs00000000017f6ee30001c665
