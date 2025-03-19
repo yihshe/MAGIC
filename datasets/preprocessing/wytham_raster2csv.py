@@ -24,16 +24,19 @@ def extract_date_from_path(raster_path):
         return match.group(0)
     return "UnknownDate"
 
-S2_FULL_BANDS = ['B01', 'B02_BLUE', 'B03_GREEN', 'B04_RED',
-                'B05_RE1', 'B06_RE2', 'B07_RE3', 'B08_NIR1',
-                'B8A_NIR2', 'B09_WV', 'B10', 'B11_SWI1',
-                'B12_SWI2']
+S2_RASTER_BANDS = ['B01', 'B02_BLUE', 'B03_GREEN', 'B04_RED',
+                   'B05_RE1', 'B06_RE2', 'B07_RE3', 'B08_NIR1',
+                   'B8A_NIR2', 'B09_WV', 'B11_SWI1', 'B12_SWI2']
 
 for raster_path in raster_files:
     # Extract date from filename
     date_str = extract_date_from_path(raster_path)
 
     with rasterio.open(raster_path) as src:
+
+        # get the band names from the raster
+        band_names = src.descriptions
+        
         # Ensure CRS matches shapefile
         if src.crs != gdf.crs:
             gdf = gdf.to_crs(src.crs)
@@ -60,7 +63,7 @@ for raster_path in raster_files:
         #     dst.write(out_image)
 
         csv_filename = raster_path.replace(".tif", "_extracted.csv")
-        header = ["date", "sample_id", "row", "col", "x", "y"]+S2_FULL_BANDS
+        header = ["date", "sample_id", "row", "col", "x", "y"]+S2_RASTER_BANDS
 
         with open(csv_filename, mode='w', newline='') as csvfile:
             writer = csv.writer(csvfile)
@@ -86,7 +89,7 @@ for raster_path in raster_files:
                     # Build the output row
                     pixel_values_list = pixel_values.tolist()
 
-                    row_data = [date_str,sample_id,row,col,x,y] + pixel_values_list
+                    row_data = [date_str,sample_id,row,col,x,y] + pixel_values_list[:-1] # exclude the last band 'SCL'
 
                     writer.writerow(row_data)
     
