@@ -1,0 +1,2 @@
+# Reshape the in-situ measurements CSV file to have the same format as the aggregated Sentinel-2 CSV file.
+# Also reshape the extracted raster angles CSV file to have the same format as the aggregated Sentinel-2 CSV file.

@@ -115,6 +115,7 @@ input/
 saved/
 wandb/
 data/raw/wytham
+data/processed/rtm/wytham/
 
 # Redundant files
 .nfs00000000017f6ee30001c665

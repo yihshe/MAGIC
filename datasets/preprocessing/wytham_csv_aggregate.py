@@ -1,8 +1,8 @@
-import csv
 import os
 import glob
 import pandas as pd
 import numpy as np
+
 
 BASE_DIR = "/maps/ys611/MAGIC/data/raw/wytham"
 csv_s2_paths = glob.glob(os.path.join(BASE_DIR, "rasters_sentinel2_2018", "*.csv"))
@@ -25,7 +25,7 @@ df0_sample_ids = df0["sample_id"].unique()
 df_list = []
 for date, csv_path in zip(dates, csv_s2_paths):
     df = pd.read_csv(csv_path)
-    assert np.array.equal(df['sample_id'].unique(), df0_sample_ids), "Sample IDs are not the same across all CSVs"
+    assert np.array_equal(df['sample_id'].unique(), df0_sample_ids), "Sample IDs are not the same across all CSVs"
     # change date from e.g. 2018-06-29 to 2018.06.29
     df["date"] = date.replace("-", ".")
     df_list.append(df)
@@ -33,5 +33,8 @@ df_s2 = pd.concat(df_list, axis=0)
 
 # Save the aggregated CSV
 df_s2.to_csv(os.path.join(BASE_DIR, "csv_training_data", "rasters_sentinel2_2018.csv"), index=False)
+
+
+
 
 
