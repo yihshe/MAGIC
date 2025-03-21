@@ -22,7 +22,7 @@ SAVE_DIR_TRAIN = os.path.join(SAVE_DIR, "train.csv")
 SAVE_DIR_VALID = os.path.join(SAVE_DIR, "valid.csv")
 SAVE_DIR_TEST = os.path.join(SAVE_DIR, "test.csv")
 
-CSV_S2_2018_DIR = os.path.join(BASE_DIR, "csv_training_data", "rasters_sentinel2_2018.csv")
+CSV_S2_2018_DIR = os.path.join(BASE_DIR, "csv_preprocessed_data", "rasters_sentinel2_2018.csv")
 
 SAMPLE_RATIO = 0.5
 SPLIT_RATIO = 0.2
