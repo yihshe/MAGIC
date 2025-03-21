@@ -29,7 +29,7 @@ SPLIT_RATIO = 0.2
 
 csv_s2_2018 = pd.read_csv(CSV_S2_2018_DIR)
 sample_ids = csv_s2_2018["sample_id"].unique()
-# sample a subset of the data based on the sample id and the sample ratio
+# TODO sample a subset of the data based on the sample id and the sample ratio
 # sample_ids = np.random.choice(sample_ids, int(len(sample_ids)*SAMPLE_RATIO), replace=False)
 
 # split the data according to the sample id

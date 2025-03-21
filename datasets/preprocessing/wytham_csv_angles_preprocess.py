@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import glob
 
-ATTRS = ['date', 'view_zenith', 'sun_zenith', 'relative_azimuth']
+ATTRS = ['date', 'tto', 'tts', 'psi']
 BASE_DIR = "/maps/ys611/MAGIC/data/raw/wytham"
 csv_s2_paths = glob.glob(os.path.join(BASE_DIR, "rasters_sentinel2_2018", "*.csv"))
 dates = [os.path.basename(csv_path).split("_extracted.")[0] for csv_path in csv_s2_paths]
@@ -25,9 +25,11 @@ for date in dates:
     if relative_azimuth > 180:
         relative_azimuth = 360 - relative_azimuth
     # Assign to RTM parameters
-    # tto (Observation Zenith Angle), tts (Sun Zenith Angle), psi (Relative Azimuth Angle)
+    tto = view_zenith 
+    tts = sun_zenith
+    psi = relative_azimuth
     # Create a new row with the date and the RTM parameters
-    new_row = pd.DataFrame([[date.replace('-', '.'), view_zenith, sun_zenith, relative_azimuth]], columns=ATTRS)
+    new_row = pd.DataFrame([[date.replace('-', '.'), tto, tts, psi]], columns=ATTRS)
     # Append the new row to the reshaped DataFrame
     csv_s2_rtm_angles = pd.concat([csv_s2_rtm_angles, new_row], ignore_index=True)
 

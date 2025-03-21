@@ -6,12 +6,9 @@ import numpy as np
 
 BASE_DIR = "/maps/ys611/MAGIC/data/raw/wytham"
 csv_s2_paths = glob.glob(os.path.join(BASE_DIR, "rasters_sentinel2_2018", "*.csv"))
-csv_frm4veg_path = os.path.join(BASE_DIR, "csv_in_situ_validation/FRM_Veg_Wytham_20180703_V2_extr_NEW.csv")
-csv_s2_angle_path = os.path.join(BASE_DIR, "csv_in_situ_validation/Sentinel2_2018_angles.csv")
+csv_s2_rtm_angles_path = os.path.join(BASE_DIR, "csv_preprocessed_data/rasters_sentinel2_2018_rtm_angles.csv")
 
-# Read the CSV files seprated by ";"
-csv_frm4veg = pd.read_csv(csv_frm4veg_path, delimiter=';')
-csv_s2_angle = pd.read_csv(csv_s2_angle_path, delimiter=';')
+csv_s2_rtm_angles = pd.read_csv(csv_s2_rtm_angles_path)
 
 # Get all the dates from the Sentinel-2 CSV file names
 dates = [os.path.basename(csv_path).split("_extracted.")[0] for csv_path in csv_s2_paths]
@@ -28,6 +25,8 @@ for date, csv_path in zip(dates, csv_s2_paths):
     assert np.array_equal(df['sample_id'].unique(), df0_sample_ids), "Sample IDs are not the same across all CSVs"
     # change date from e.g. 2018-06-29 to 2018.06.29
     df["date"] = date.replace("-", ".")
+    for angle in ["tto", "tts", "psi"]:
+        df[angle] = csv_s2_rtm_angles.loc[csv_s2_rtm_angles["date"] == date.replace("-", "."), angle].values[0]
     df_list.append(df)
 df_s2 = pd.concat(df_list, axis=0)
 
