@@ -208,7 +208,7 @@ class PHYS_VAE(nn.Module):
 
         prior_z_phy_stat = {'mean': prior_z_phy_mean, 'lnvar': 2.0*torch.log(prior_z_phy_std)}#TODO check lnvar and reparameterization
         prior_z_aux2_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux2), device=device),
-            'lnvar': torch.zeros(n, max(0,self.dim_z_aux2), device=device)}
+            'lnvar': torch.zeros(n, max(0,self.dim_z_aux2), device=device)}#TODO why lnvar for z_aux2 is defined based on dim_z_aux2?
         return prior_z_phy_stat, prior_z_aux2_stat
 
 

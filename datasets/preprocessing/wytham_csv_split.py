@@ -23,7 +23,7 @@ SAVE_DIR_VALID = os.path.join(SAVE_DIR, "valid.csv")
 SAVE_DIR_TEST = os.path.join(SAVE_DIR, "test.csv")
 
 CSV_S2_2018_DIR = os.path.join(BASE_DIR, "csv_preprocessed_data", "rasters_sentinel2_2018.csv")
-
+# TODO add the S2 spectra from frm4veg sample sites and standardize the data
 SAMPLE_RATIO = 0.5
 SPLIT_RATIO = 0.2
 
