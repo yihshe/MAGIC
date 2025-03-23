@@ -25,6 +25,7 @@ for date, csv_path in zip(dates, csv_s2_paths):
     assert np.array_equal(df['sample_id'].unique(), df0_sample_ids), "Sample IDs are not the same across all CSVs"
     # change date from e.g. 2018-06-29 to 2018.06.29
     df["date"] = date.replace("-", ".")
+    df['class'] = 'unknown' # class of tree species is unknown
     for angle in ["tto", "tts", "psi"]:
         df[angle] = csv_s2_rtm_angles.loc[csv_s2_rtm_angles["date"] == date.replace("-", "."), angle].values[0]
     df_list.append(df)

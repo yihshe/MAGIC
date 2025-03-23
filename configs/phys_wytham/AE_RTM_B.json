@@ -1,5 +1,5 @@
 {
-    "name": "PHYS_VAE_RTM_B",
+    "name": "PHYS_VAE_RTM_B_WYTHAM",
     "n_gpu": 1,
     "arch": {
         "type": "PHYS_VAE",
@@ -34,10 +34,10 @@
         "type": "SpectrumS2DataLoader",
         "args": {
             "data_dir": "data/processed/rtm/wytham/train.csv",
-            "batch_size": 64,
+            "batch_size": 128,
             "shuffle": true,
             "validation_split": 0.0,
-            "num_workers": 0,
+            "num_workers": 4,
             "with_const": true
         },
         "data_dir_valid": "data/processed/rtm/wytham/valid.csv",
