@@ -80,6 +80,8 @@ def main(config):
             target = data_dict[target_key].to(device)
             if input_const_keys is not None:
                 input_const = {k: data_dict[k].to(device) for k in input_const_keys}
+            else:
+                input_const = None
 
             latent_phy, latent_aux, output, init_output = model(data, inference=True, const = input_const)
 

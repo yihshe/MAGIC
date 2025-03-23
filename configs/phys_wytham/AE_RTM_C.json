@@ -34,7 +34,7 @@
         "type": "SpectrumS2DataLoader",
         "args": {
             "data_dir": "data/processed/rtm/wytham/train.csv",
-            "batch_size": 128,
+            "batch_size": 256,
             "shuffle": true,
             "validation_split": 0.0,
             "num_workers": 4,

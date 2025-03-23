@@ -79,6 +79,8 @@ class PhysVAETrainer(BaseTrainer):
             # TODO load the angle specific information here
             if self.input_const_keys is not None:
                 input_const = {k: data_dict[k].to(self.device) for k in self.input_const_keys}
+            else:
+                input_const = None
 
             if data.dim() == 3:
                 seqence_len = data.size(1)
@@ -193,6 +195,8 @@ class PhysVAETrainer(BaseTrainer):
                 # target = data_dict[self.target_key].to(self.device)
                 if self.input_const_keys is not None:
                     input_const = {k: data_dict[k].to(self.device) for k in self.input_const_keys}
+                else:
+                    input_const = None
                 if data.dim() == 3:
                     data = data.view(-1, data.size(-1))
                     
