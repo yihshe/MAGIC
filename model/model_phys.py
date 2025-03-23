@@ -116,8 +116,10 @@ class Physics_RTM(nn.Module):
         
         return z_phy_rescaled
     
-    def forward(self, z_phy:torch.Tensor):
+    def forward(self, z_phy:torch.Tensor, const:dict=None):
         z_phy_rescaled = self.rescale(z_phy)
+        if const is not None:
+            z_phy_rescaled.update(const)
         output = self.model.run(**z_phy_rescaled)[:, self.bands_index]
         return (output - self.x_mean) / self.x_scale 
 
@@ -165,7 +167,7 @@ class Physics_Mogi(nn.Module):
         
         return z_phy_rescaled
     
-    def forward(self, z_phy:torch.Tensor):
+    def forward(self, z_phy:torch.Tensor, const:dict=None):
         z_phy_rescaled = self.rescale(z_phy)
         output = self.model.run(**z_phy_rescaled)
         return (output - self.x_mean) / self.x_scale 
@@ -212,15 +214,15 @@ class PHYS_VAE(nn.Module):
         return prior_z_phy_stat, prior_z_aux2_stat
 
 
-    def generate_physonly(self, z_phy:torch.Tensor):
-        y = self.physics_model(z_phy) # (n, in_channels) 
+    def generate_physonly(self, z_phy:torch.Tensor, const:dict=None):
+        y = self.physics_model(z_phy, const=const) # (n, in_channels) 
         return y
 
 
-    def decode(self, z_phy:torch.Tensor, z_aux2:torch.Tensor, full:bool=False):
+    def decode(self, z_phy:torch.Tensor, z_aux2:torch.Tensor, full:bool=False, const:dict=None):
         if not self.no_phy:
             # with physics
-            y = self.physics_model(z_phy) # (n, in_channels)
+            y = self.physics_model(z_phy, const=const) # (n, in_channels)
             # x_P = y.repeat(1,3,1,1)
             x_P = y
             if self.dim_z_aux2 >= 0:
@@ -285,7 +287,7 @@ class PHYS_VAE(nn.Module):
 
 
     def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False,
-                inference:bool=False):
+                inference:bool=False, const:dict=None):
         z_phy_stat, z_aux2_stat, unmixed, = self.encode(x)
 
         if not reconstruct:
@@ -293,10 +295,10 @@ class PHYS_VAE(nn.Module):
         
         if not inference:
             # draw & reconstruction
-            x_mean, x_lnvar = self.decode(*self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z), full=False)
+            x_mean, x_lnvar = self.decode(*self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z), full=False, const=const)
 
             return z_phy_stat, z_aux2_stat, x_mean, x_lnvar
         else:
             z_phy, z_aux2 = self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z)
-            x_PB, x_P, x_lnvar, y = self.decode(z_phy, z_aux2, full=True)
+            x_PB, x_P, x_lnvar, y = self.decode(z_phy, z_aux2, full=True, const=const)
             return z_phy, z_aux2, x_PB, x_P

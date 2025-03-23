@@ -7,7 +7,7 @@ from datasets import PARENT_DIR
 
 
 class SpectrumS2(data.Dataset):
-    def __init__(self, csv_path, transform=None):
+    def __init__(self, csv_path, transform=None, with_const=False):
         super(SpectrumS2, self).__init__()
         # the dataset is a tabular data of satellite spectrums from Sentinel2
         self.data_df = pd.read_csv(os.path.join(PARENT_DIR, csv_path))
@@ -17,6 +17,8 @@ class SpectrumS2(data.Dataset):
                          'B06_RE2', 'B07_RE3', 'B08_NIR1', 'B8A_NIR2',
                          'B09_WV', 'B11_SWI1', 'B12_SWI2']
         self.attr_info = ['class', 'sample_id', 'date']
+        if with_const:
+            self.attr_info += ['tto', 'tts', 'psi']
         
     def __len__(self):
         return len(self.data_df)

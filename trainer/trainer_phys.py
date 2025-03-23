@@ -52,6 +52,11 @@ class PhysVAETrainer(BaseTrainer):
         # define the data key and target key
         self.data_key = config['trainer']['input_key']
         self.target_key = config['trainer']['output_key']
+        # define the input-specific constants to be used in the physic model
+        if 'input_const_keys' in config['trainer']:
+            self.input_const_keys = config['trainer']['input_const_keys']
+        else:   
+            self.input_const_keys = None
         # define a flag to indicate whether to stablize the gradient or not
         self.stablize_grad = config['trainer']['stablize_grad']
         self.stablize_count = 0
@@ -71,6 +76,9 @@ class PhysVAETrainer(BaseTrainer):
 
         for batch_idx, data_dict in enumerate(self.data_loader):
             data = data_dict[self.data_key].to(self.device)
+            # TODO load the angle specific information here
+            if self.input_const_keys is not None:
+                input_const = {k: data_dict[k].to(self.device) for k in self.input_const_keys}
 
             if data.dim() == 3:
                 seqence_len = data.size(1)
@@ -85,7 +93,7 @@ class PhysVAETrainer(BaseTrainer):
             z_phy, z_aux2 = self.model.draw(z_phy_stat, z_aux2_stat, hard_z=False)
 
             # Decode step: Reconstruct outputs
-            x_PB, x_P, x_lnvar, y = self.model.decode(z_phy, z_aux2, full=True)
+            x_PB, x_P, x_lnvar, y = self.model.decode(z_phy, z_aux2, full=True, const = input_const)
 
             # Reconstruction variance
             x_var = torch.exp(x_lnvar)
@@ -183,12 +191,14 @@ class PhysVAETrainer(BaseTrainer):
             for batch_idx, data_dict in enumerate(self.valid_data_loader):
                 data = data_dict[self.data_key].to(self.device)
                 # target = data_dict[self.target_key].to(self.device)
+                if self.input_const_keys is not None:
+                    input_const = {k: data_dict[k].to(self.device) for k in self.input_const_keys}
                 if data.dim() == 3:
                     data = data.view(-1, data.size(-1))
                     
                 data = data.to(self.device)
 
-                z_phy_stat, z_aux2_stat, x, _ = self.model(data)
+                z_phy_stat, z_aux2_stat, x, _ = self.model(data, const = input_const)
 
                 rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux2_stat, x)
 

@@ -24,7 +24,8 @@ def main(config):
         batch_size=512,
         shuffle=False,
         validation_split=0.0,
-        num_workers=0
+        num_workers=0,
+        with_const=config['data_loader']['args']['with_const'] if 'with_const' in config['data_loader']['args'] else False
     )
 
     # build model architecture
@@ -54,6 +55,10 @@ def main(config):
 
     data_key = config['trainer']['input_key']
     target_key = config['trainer']['output_key']
+    if 'input_const_keys' in config['trainer']:
+        input_const_keys = config['trainer']['input_const_keys']
+    else:
+        input_const_keys = None
     no_phy = config['arch']['phys_vae']['no_phy']
     dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2']
 
@@ -73,14 +78,16 @@ def main(config):
         for batch_idx, data_dict in enumerate(data_loader):
             data = data_dict[data_key].to(device)
             target = data_dict[target_key].to(device)
+            if input_const_keys is not None:
+                input_const = {k: data_dict[k].to(device) for k in input_const_keys}
 
-            latent_phy, latent_aux, output, init_output = model(data, inference=True)
+            latent_phy, latent_aux, output, init_output = model(data, inference=True, const = input_const)
 
             if not no_phy:
                 latent_phy = model.physics_model.rescale(latent_phy)
                 latent = torch.stack([latent_phy[k] for k in latent_phy.keys()], dim=1)
                 bias = None
-                if dim_z_aux2 >= 0:
+                if dim_z_aux2 >= 0:#TODO in ablation, it is possible that dim_z_aux2=-1 but the model still has the bias correction
                     bias = output - init_output
                     data_concat(analyzer, 'init_output', init_output)
                     data_concat(analyzer, 'bias', bias)

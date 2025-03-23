@@ -25,7 +25,8 @@ def main(config):
         batch_size=512,
         shuffle=False,
         validation_split=0.0,
-        num_workers=0
+        num_workers=0,
+        with_const=config['data_loader']['args']['with_const'] if 'with_const' in config['data_loader']['args'] else False
     )
 
     # build model architecture

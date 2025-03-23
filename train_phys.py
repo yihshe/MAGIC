@@ -31,7 +31,8 @@ def main(config):
         batch_size=64,
         shuffle=True,
         validation_split=0.0,  # Validation set is already separated
-        num_workers=2
+        num_workers=2,
+        with_const=config['data_loader']['args']['with_const'] if 'with_const' in config['data_loader']['args'] else False
     )
 
     # Build model architecture and log 

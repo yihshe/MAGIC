@@ -34,9 +34,9 @@
 # python3 -m test_phys_mogi \
 #         --config saved/mogi/models/PHYS_VAE_Mogi_B/1209_174339/config.json \
 #         --resume saved/mogi/models/PHYS_VAE_Mogi_B/1209_174339/model_best.pth
-python3 -m test_phys_mogi \
-        --config saved/mogi/models/PHYS_VAE_Mogi_B_seq/1210_093812/config.json \
-        --resume saved/mogi/models/PHYS_VAE_Mogi_B_seq/1210_093812/model_best.pth
+# python3 -m test_phys_mogi \
+#         --config saved/mogi/models/PHYS_VAE_Mogi_B_seq/1210_093812/config.json \
+#         --resume saved/mogi/models/PHYS_VAE_Mogi_B_seq/1210_093812/model_best.pth
 
 # Train AE_Mogi_C 
 # python3 -m train_phys --config configs/phys/AE_Mogi_C.json
@@ -44,6 +44,6 @@ python3 -m test_phys_mogi \
 #         --config saved/mogi/models/PHYS_VAE_Mogi_C/1209_174455/config.json \
 #         --resume saved/mogi/models/PHYS_VAE_Mogi_C/1209_174455/model_best.pth
 
-python3 -m test_phys_mogi \
-        --config saved/mogi/models/PHYS_VAE_Mogi_C_seq/1210_094000/config.json \
-        --resume saved/mogi/models/PHYS_VAE_Mogi_C_seq/1210_094000/model_best.pth
+# python3 -m test_phys_mogi \
+#         --config saved/mogi/models/PHYS_VAE_Mogi_C_seq/1210_094000/config.json \
+#         --resume saved/mogi/models/PHYS_VAE_Mogi_C_seq/1210_094000/model_best.pth
