@@ -48,7 +48,7 @@ for i, plot_label in enumerate(plot_labels):
 
 # Save the reshaped DataFrame
 csv_frm4veg_s2_reshaped.to_csv(os.path.join(SAVE_DIR, "frm4veg_sentinel2_2018.csv"), index=False)
-
+print("Done!")
 
 
 
