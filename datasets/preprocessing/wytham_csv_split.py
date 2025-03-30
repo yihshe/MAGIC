@@ -9,6 +9,9 @@ from sklearn.model_selection import train_test_split
 import os
 import json
 
+# Set the random seed for reproducibility
+np.random.seed(42)
+
 S2_BANDS = ['B02_BLUE', 'B03_GREEN', 'B04_RED', 'B05_RE1', 'B06_RE2',
             'B07_RE3', 'B08_NIR1', 'B8A_NIR2', 'B09_WV', 'B11_SWI1',
             'B12_SWI2']
@@ -21,8 +24,11 @@ if not os.path.exists(SAVE_DIR):
 SAVE_DIR_TRAIN = os.path.join(SAVE_DIR, "train.csv")
 SAVE_DIR_VALID = os.path.join(SAVE_DIR, "valid.csv")
 SAVE_DIR_TEST = os.path.join(SAVE_DIR, "test.csv")
+SAVE_DIR_TEST_FRM4VEG = os.path.join(SAVE_DIR, "test_frm4veg.csv")
 
 CSV_S2_2018_DIR = os.path.join(BASE_DIR, "csv_preprocessed_data", "rasters_sentinel2_2018.csv")
+CSV_S2_FRM4VEG_DIR = os.path.join(BASE_DIR, "csv_preprocessed_data", "frm4veg_sentinel2_2018.csv")
+
 # TODO add the S2 spectra from frm4veg sample sites and standardize the data
 SAMPLE_RATIO = 0.5
 SPLIT_RATIO = 0.2
@@ -50,16 +56,19 @@ def standardize(df, columns, scaler=None):
 df_train = csv_s2_2018[csv_s2_2018["sample_id"].isin(train_sample_ids)]
 df_valid = csv_s2_2018[csv_s2_2018["sample_id"].isin(valid_sample_ids)]
 df_test = csv_s2_2018[csv_s2_2018["sample_id"].isin(test_sample_ids)]
+df_test_frm4veg = pd.read_csv(CSV_S2_FRM4VEG_DIR)
 
 scaler = None
 df_train, scaler = standardize(df_train, S2_BANDS, scaler)
 df_valid, _ = standardize(df_valid, S2_BANDS, scaler)
 df_test, _ = standardize(df_test, S2_BANDS, scaler)
+df_test_frm4veg, _ = standardize(df_test_frm4veg, S2_BANDS, scaler)
 
 # Save the train, valid and test sets
 df_train.to_csv(SAVE_DIR_TRAIN, index=False)
 df_valid.to_csv(SAVE_DIR_VALID, index=False)
 df_test.to_csv(SAVE_DIR_TEST, index=False)
+df_test_frm4veg.to_csv(SAVE_DIR_TEST_FRM4VEG, index=False)
 
 # Save the scaler
 np.save(os.path.join(SAVE_DIR, "train_x_mean.npy"), scaler.mean_)
