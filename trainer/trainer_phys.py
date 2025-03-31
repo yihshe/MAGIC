@@ -1,4 +1,4 @@
-# Adapted from the training script of Phys-VAE
+7# Adapted from the training script of Phys-VAE
 import numpy as np
 import torch
 from torchvision.utils import make_grid

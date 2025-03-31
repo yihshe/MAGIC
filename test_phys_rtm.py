@@ -15,12 +15,16 @@ import os
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def main(config):
+def main(config, args: argparse.Namespace):
     logger = config.get_logger('test')
 
+    if args.insitu:
+        data_dir_test = config['data_loader']['data_dir_test'].replace('test.csv', 'test_frm4veg.csv')
+    else:
+        data_dir_test = config['data_loader']['data_dir_test']
     # setup data_loader instances
     data_loader = getattr(module_data, config['data_loader']['type'])(
-        config['data_loader']['data_dir_test'],
+        data_dir = data_dir_test,
         batch_size=512,
         shuffle=False,
         validation_split=0.0,
@@ -73,6 +77,7 @@ def main(config):
                 'B12_SWI2']
 
     analyzer = {}
+
 
     with torch.no_grad():
         for batch_idx, data_dict in enumerate(data_loader):
@@ -152,12 +157,15 @@ def main(config):
     df['sample_id'] = analyzer['sample_id']
     df['class'] = analyzer['class']
     df['date'] = analyzer['date']
-    # df.to_csv(
-    #     os.path.join(CURRENT_DIR, str(config.resume).split('.pth')[0]+'_testset_analyzer.csv'),
-    #           index=False)
-    # logger.info('Analyzer saved to {}'.format(
-    #     os.path.join(CURRENT_DIR, str(config.resume).split('.pth')[0]+'_testset_analyzer.csv')
-    # ))
+
+    insitu = '_frm4veg' if args.insitu else ''
+
+    df.to_csv(
+        os.path.join(CURRENT_DIR, str(config.resume).split('.pth')[0]+f'_testset_analyzer{insitu}.csv'),
+              index=False)
+    logger.info('Analyzer saved to {}'.format(
+        os.path.join(CURRENT_DIR, str(config.resume).split('.pth')[0]+f'_testset_analyzer{insitu}.csv')
+    ))
 
 
 def data_concat(analyzer: dict, key: str, data):
@@ -170,15 +178,18 @@ def data_concat(analyzer: dict, key: str, data):
 
 
 if __name__ == '__main__':
-    args = argparse.ArgumentParser(description='PyTorch Template')
-    args.add_argument('-c', '--config', default=None, type=str,
+    parser = argparse.ArgumentParser(description='PyTorch Template')
+    parser.add_argument('-c', '--config', default=None, type=str,
                       help='config file path (default: None)')
-    args.add_argument('-r', '--resume', default=None, type=str,
+    parser.add_argument('-r', '--resume', default=None, type=str,
                       help='path to latest checkpoint (default: None)')
-    args.add_argument('-d', '--device', default=None, type=str,
+    parser.add_argument('-d', '--device', default=None, type=str,
                       help='indices of GPUs to enable (default: all)')
+    parser.add_argument('-i', '--insitu', action='store_true', 
+                        help='use insitu data (default: False)')
+
     # args.add_argument('-a', '--analyze', default=False, type=bool,
     #                   help='analyze and saved the test results (default: False)')
-
-    config = ConfigParser.from_args(args)
-    main(config)
+    config = ConfigParser.from_args(parser)
+    args = parser.parse_args()
+    main(config, args)
