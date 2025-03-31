@@ -32,7 +32,7 @@ for date, csv_path in zip(dates, csv_s2_paths):
 df_s2 = pd.concat(df_list, axis=0)
 
 # Save the aggregated CSV
-df_s2.to_csv(os.path.join(BASE_DIR, "csv_preprocessed_data", "rasters_sentinel2_2018.csv"), index=False)
+# df_s2.to_csv(os.path.join(BASE_DIR, "csv_preprocessed_data", "rasters_sentinel2_2018.csv"), index=False)
 
 
 

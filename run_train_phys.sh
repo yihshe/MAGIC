@@ -10,27 +10,27 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 
 # Train AE_RTM_B (encoder being replaced with RTM)
 # python3 -m train_phys --config configs/phys_wytham/AE_RTM_B.json
-# python3 -m test_phys_rtm \
-#         --config saved/rtm/models/PHYS_VAE_RTM_B_WYTHAM/0329_080231/config.json \
-#         --resume saved/rtm/models/PHYS_VAE_RTM_B_WYTHAM/0329_080231/model_best.pth \
-#         --insitu
+python3 -m test_phys_rtm \
+        --config saved/rtm/models/PHYS_VAE_RTM_B_WYTHAM/0323_222945/config.json \
+        --resume saved/rtm/models/PHYS_VAE_RTM_B_WYTHAM/0323_222945/model_best.pth \
+        --insitu
 
 
 # Train AE_RTM_C (encoder being replaced with RTM + correction layer)
 # python3 -m train_phys --config configs/phys_wytham/AE_RTM_C.json
-# python3 -m test_phys_rtm \
-#         --config saved/rtm/models/PHYS_VAE_RTM_C_WYTHAM/0329_075709/config.json \
-#         --resume saved/rtm/models/PHYS_VAE_RTM_C_WYTHAM/0329_075709/model_best.pth \
-#         --insitu
+python3 -m test_phys_rtm \
+        --config saved/rtm/models/PHYS_VAE_RTM_C_WYTHAM/0323_204415/config.json \
+        --resume saved/rtm/models/PHYS_VAE_RTM_C_WYTHAM/0323_204415/model_best.pth \
+        --insitu
 
 #---------------AUSTRIA DATA-----------------
 # PhysVAE
 # Train AE_RTM_A (VAE)
 # python3 -m train_phys --config configs/phys/AE_RTM_A.json
 # python -m ptvsd --host 127.0.0.1 --port 5678 --wait -m train_phys --config configs/phys/AE_RTM_A.json
-python3 -m test_phys_rtm \
-        --config saved/rtm/models/PHYS_VAE_RTM_A/1204_181529/config.json \
-        --resume saved/rtm/models/PHYS_VAE_RTM_A/1204_181529/model_best.pth
+# python3 -m test_phys_rtm \
+#         --config saved/rtm/models/PHYS_VAE_RTM_A/1204_181529/config.json \
+#         --resume saved/rtm/models/PHYS_VAE_RTM_A/1204_181529/model_best.pth
 
 # Train AE_RTM_B (encoder being replaced with RTM)
 # python3 -m train_phys --config configs/phys/AE_RTM_B.json
