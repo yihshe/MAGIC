@@ -1,5 +1,6 @@
 """
 Simplified version of PhysVAE for ablation study.
+TODO add wandb logging to check the balance between different terms.
 """
 # Adapted from the training script of Phys-VAE
 import numpy as np
@@ -80,7 +81,7 @@ class PhysVAETrainer(BaseTrainer):
 
         for batch_idx, data_dict in enumerate(self.data_loader):
             data = data_dict[self.data_key].to(self.device)
-            # TODO load the angle specific information here
+            # Load the angle specific information here
             if self.input_const_keys is not None:
                 input_const = {k: data_dict[k].to(self.device) for k in self.input_const_keys}
             else:
@@ -93,54 +94,58 @@ class PhysVAETrainer(BaseTrainer):
             self.optimizer.zero_grad()
 
             # Encode step: Infer latent variables
-            z_phy_stat, z_aux2_stat, unmixed = self.model.encode(data)
+            # z_phy_stat, z_aux2_stat, unmixed = self.model.encode(data)
+            z_phy_stat, z_aux2_stat = self.model.encode(data)
 
             # Draw step: Sample latent variables
             z_phy, z_aux2 = self.model.draw(z_phy_stat, z_aux2_stat, hard_z=False)
 
             # Decode step: Reconstruct outputs
-            x_PB, x_P, x_lnvar, y = self.model.decode(z_phy, z_aux2, full=True, const = input_const)
+            x_PB, x_P, y = self.model.decode(z_phy, z_aux2, full=True, const = input_const)
 
             # Reconstruction variance
-            x_var = torch.exp(x_lnvar)
+            # x_var = torch.exp(x_lnvar)
 
             # Loss calculations
-            # ELBO loss #TODO element-wise loss, not sample-wise
+            # ELBO loss #NOTE here it's sample-wise loss, not element-wise loss
             rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux2_stat, x_PB)
             
             # Unmixing regularization (R_{DA,1})
-            unmix_loss = self._unmixing_loss(unmixed, y)  # Unmixing regularization TODO reg_unmix (R_{DA,1})
+            # unmix_loss = self._unmixing_loss(unmixed, y)  # Unmixing regularization TODO reg_unmix (R_{DA,1})
 
-            # Synthetic data regularization (R_{DA,2})
-            synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
+            # Synthetic data regularization (R_{DA,2}) #NOTE this part can be ablated
+            # synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
 
             # Least action regularization (R_{ppc}) 
             least_action_loss = self._least_action_loss(x_PB, x_P) 
 
-            # Sequence smoothness regularization (for Mogi model)
+            # Sequence smoothness regularization (for Mogi model) #NOTE used only in Mogi model
             smoothness_loss = self._sequence_smoothness_loss(x_P, seqence_len)
 
             
             # Total loss 
             if not self.no_phy and epoch < self.epochs_pretrain: 
+                # NOTE this pretraining setting has not been experimented yet
+                # TODO this pretraining can be used as an ablation study to increase the model reliance on the physics model
                 # Pretraining phase, not used in default setting
-                loss = self.synthetic_data_loss_weight * synthetic_data_loss
+                # loss = self.synthetic_data_loss_weight * synthetic_data_loss
+                pass
             else:
-                # Training phase TODO loss weights TBD
+                # Training phase 
                 # loss = rec_loss \
                 #     + self.kl_loss_weight * kl_loss * x_var.detach() \
                 #     + self.unmix_loss_weight * unmix_loss \
                 #     + self.synthetic_data_loss_weight * synthetic_data_loss \
                 #     + self.least_action_loss_weight * least_action_loss
                 
-                # NOTE for experiments before 2025.04.06, + self.kl_loss_weight * kl_loss * x_var.detach() \
+                # NOTE wight for the least_action_loss can be fixed
                 loss = rec_loss \
                     + self._loss_weight(rec_loss, kl_loss) * kl_loss \
-                    + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
-                    + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
                     + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
                     + 0.01 * smoothness_loss
                     # + self._loss_weight(rec_loss, smoothness_loss) * smoothness_loss
+                    # + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
+                    # + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
                 
             # Backpropagation
             loss.backward()
@@ -157,8 +162,8 @@ class PhysVAETrainer(BaseTrainer):
             self.train_metrics.update('loss', loss.item())
             self.train_metrics.update('rec_loss', rec_loss.item())
             self.train_metrics.update('kl_loss', kl_loss.item())
-            self.train_metrics.update('unmix_loss', unmix_loss.item())
-            self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
+            # self.train_metrics.update('unmix_loss', unmix_loss.item())
+            # self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
             self.train_metrics.update('least_act_loss', least_action_loss.item())
             self.train_metrics.update('smoothness_loss', smoothness_loss.item())
 
@@ -166,8 +171,9 @@ class PhysVAETrainer(BaseTrainer):
             if batch_idx % self.config['trainer']['log_step'] == 0:
                 self.logger.info(f"Train Epoch: {epoch} [{batch_idx}/{len(self.data_loader)}] "
                                  f"Loss: {loss.item():.6f} Rec Loss: {rec_loss.item():.6f} "
-                                 f"KL Loss: {kl_loss.item():.6f} Unmix Loss: {unmix_loss.item():.6f} "
-                                 f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
+                                 f"KL Loss: {kl_loss.item():.6f} "
+                                #  f"Unmix Loss: {unmix_loss.item():.6f} "
+                                #  f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
                                  f"Least Action Loss: {least_action_loss.item():.6f} "
                                  f"Smoothness Loss: {smoothness_loss.item():.6f}")
 
@@ -207,7 +213,7 @@ class PhysVAETrainer(BaseTrainer):
                     
                 data = data.to(self.device)
 
-                z_phy_stat, z_aux2_stat, x, _ = self.model(data, const = input_const)
+                z_phy_stat, z_aux2_stat, x = self.model(data, const = input_const)
 
                 rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux2_stat, x)
 
