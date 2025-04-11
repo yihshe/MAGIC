@@ -201,12 +201,17 @@ class PHYS_VAE(nn.Module):
             raise ValueError("Unknown model type")
 
     def priors(self, n:int, device:torch.device):
-        prior_z_phy_mean = torch.cat([
-            torch.zeros(n,1,device=device) * 0.5 * (0 + 1) for i in range(self.dim_z_phy)
-        ], dim=1)
-        prior_z_phy_std = torch.cat([
-            torch.ones(n,1,device=device) * max(1e-3, 0.866*(1 - 0)) for i in range(self.dim_z_phy)
-        ], dim=1)
+        # NOTE the prior before is problematic, as I wrongly set the z_phy_mean as zero
+        # prior_z_phy_mean = torch.cat([
+        #     torch.ones(n,1,device=device) * 0.5 * (0 + 1) for i in range(self.dim_z_phy)
+        # ], dim=1)
+        # prior_z_phy_std = torch.cat([
+        #     torch.ones(n,1,device=device) * max(1e-3, 0.866*(1 - 0)) for i in range(self.dim_z_phy)
+        # ], dim=1)
+
+        prior_z_phy_mean = torch.full((n, self.dim_z_phy), 0.5, device=device)  # mean = 0.5
+        prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.1, device=device)   # std = 0.1
+        # prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.2, device=device)
 
         prior_z_phy_stat = {'mean': prior_z_phy_mean, 'lnvar': 2.0*torch.log(prior_z_phy_std)}#TODO check lnvar and reparameterization
         prior_z_aux2_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux2), device=device),

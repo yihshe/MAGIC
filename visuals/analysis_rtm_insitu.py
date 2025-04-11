@@ -15,14 +15,26 @@ CSV_PATH1 = os.path.join(
     BASE_PATH, 'rtm/models/PHYS_VAE_RTM_B_WYTHAM/0329_080231/model_best_testset_analyzer_frm4veg.csv')#NOTE make sure that the value range of LAIu is [0.01, 5]
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_B_WYTHAM/0323_222945/model_best_testset_analyzer_frm4veg.csv')
 CSV_PATH2 = os.path.join(
-    BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0329_075709/model_best_testset_analyzer_frm4veg.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0329_075709/model_best_testset_analyzer_frm4veg.csv')
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0323_204415/model_best_testset_analyzer_frm4veg.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_1/0406_094832/model_best_testset_analyzer_frm4veg.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3/0406_105747/model_best_testset_analyzer_frm4veg.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3_prior/0406_114131/model_best_testset_analyzer_frm4veg.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.1/0407_102159/model_best_testset_analyzer_frm4veg.csv')
+    BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.2/0407_120629/model_best_testset_analyzer_frm4veg.csv')
+
 
 CSV_PATH_INSITU = '/maps/ys611/MAGIC/data/raw/wytham/csv_preprocessed_data/frm4veg_insitu.csv'
 
 SAVE_PATH = os.path.join(BASE_PATH, 
-                         'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0329_075709/plots_frm4veg')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0329_075709/plots_frm4veg')
                         # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0323_204415/plots_frm4veg')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_1/0406_094832/plots_frm4veg')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3/0406_105747/plots_frm4veg')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3_prior_std0.1/0406_114131/plots_frm4veg')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.1/0407_102159/plots_frm4veg')
+                        'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.2/0407_120629/plots_frm4veg')
+
 
 
 S2_BANDS = ['B02_BLUE', 'B03_GREEN', 'B04_RED', 'B05_RE1', 'B06_RE2',
@@ -33,7 +45,9 @@ S2_names = {
     'B06_RE2': 'B6', 'B07_RE3': 'B7', 'B08_NIR1': 'B8', 'B8A_NIR2': 'B8a',
     'B09_WV': 'B9', 'B11_SWI1': 'B11', 'B12_SWI2': 'B12'
 }
-rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
+# rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
+rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras_exp.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
+
 ATTRS = list(rtm_paras.keys())
 # for each attr in ATTRS, create a LaTex variable name like $Z_{\mathrm{attr}}$
 ATTRS_LATEX = {
@@ -60,18 +74,21 @@ df2 = pd.read_csv(CSV_PATH2)
 df_insitu = pd.read_csv(CSV_PATH_INSITU)
 
 # retrieve the target and output bands to original scale
-MEAN = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/train_x_mean.npy')
-SCALE = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/train_x_scale.npy')
+# MEAN = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/train_x_mean.npy')
+# SCALE = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/train_x_scale.npy')
+MEAN = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period/train_x_mean.npy')
+SCALE = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period/train_x_scale.npy')
 for x in ['target', 'output']:
     df1[[f'{x}_{band}' for band in S2_BANDS]] = df1[[f'{x}_{band}' for band in S2_BANDS]]*SCALE + MEAN
     df2[[f'{x}_{band}' for band in S2_BANDS]] = df2[[f'{x}_{band}' for band in S2_BANDS]]*SCALE + MEAN
 df2[[f'init_output_{band}' for band in S2_BANDS]] = df2[[f'init_output_{band}' for band in S2_BANDS]]*SCALE + MEAN
 df2[[f'bias_{band}' for band in S2_BANDS]] = df2[[f'bias_{band}' for band in S2_BANDS]]*SCALE# df2[[f'init_output_{band}' for band in S2_BANDS]] = df2[[f'init_output_{band}' for band in S2_BANDS]]*SCALE + MEAN
     
-dates = ['2018.04.20', '2018.05.05', '2018.05.07', '2018.05.15', '2018.05.17', 
-         '2018.06.06', '2018.06.11', '2018.06.26', '2018.06.29', '2018.07.06', 
-         '2018.07.11', '2018.07.24', '2018.08.05', '2018.09.02', '2018.09.27', 
-         '2018.10.09', '2018.10.19', '2018.10.22']
+# dates = ['2018.04.20', '2018.05.05', '2018.05.07', '2018.05.15', '2018.05.17', 
+#          '2018.06.06', '2018.06.11', '2018.06.26', '2018.06.29', '2018.07.06', 
+#          '2018.07.11', '2018.07.24', '2018.08.05', '2018.09.02', '2018.09.27', 
+#          '2018.10.09', '2018.10.19', '2018.10.22']
+dates = ['2018.06.26', '2018.06.29', '2018.07.06', '2018.07.11']
 
 def r_square(y, y_hat):
     ss_res = np.sum((y - y_hat) ** 2)
@@ -129,7 +146,8 @@ def pred2insitu(df_insitu: pd.DataFrame, df_pred: pd.DataFrame, attrs: dict) -> 
 """
 Scatter plot for predicted variables and insitu measurements
 """
-for date in ['2018.06.06', '2018.06.11', '2018.06.26', '2018.06.29', '2018.07.06', '2018.07.11', '2018.07.24']:
+# for date in ['2018.06.06', '2018.06.11', '2018.06.26', '2018.06.29', '2018.07.06', '2018.07.11', '2018.07.24']:
+for date in dates:
 # date = '2018.07.11'# '2018.06.29' or '2018.07.06'
     df_pred = df2[df2['date'] == date]
     df_merged = pred2insitu(df_insitu, df_pred, ATTRS_INSITU)
@@ -160,7 +178,7 @@ for date in ['2018.06.06', '2018.06.11', '2018.06.26', '2018.06.29', '2018.07.06
         #             df_merged_filtered[f'{insitu_attr}_pred'].iloc[j], 
         #             plot, fontsize=10)
 
-        r2 = r_square(df_merged_filtered[f'{insitu_attr}_insitu'], df_merged_filtered[f'{insitu_attr}_pred'])
+        # r2 = r_square(df_merged_filtered[f'{insitu_attr}_insitu'], df_merged_filtered[f'{insitu_attr}_pred'])
         fontsize = 25
 
         # ax.set_title(f'{ATTRS_LATEX[attr]} vs {insitu_attr}')
@@ -188,9 +206,8 @@ for date in ['2018.06.06', '2018.06.11', '2018.06.26', '2018.06.29', '2018.07.06
         # make sure all ticks are rounded to 2 decimal places
         ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: '{:.2f}'.format(x)))
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: '{:.2f}'.format(x)))
-        # set RMSE as a legend
-        # ax.legend([f'RMSE: {rmse:.3f}'], fontsize=24)
-        ax.legend([f'$R^2$: {r2:.3f}'], fontsize=24)
+        # set R-squared as a legend
+        # ax.legend([f'$R^2$: {r2:.3f}'], fontsize=24)
     # set the title for the whole figure
     fig.suptitle(f'Pred vs In-situ on {date}', fontsize=25)
     plt.tight_layout()

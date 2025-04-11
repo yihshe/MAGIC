@@ -1,5 +1,5 @@
 {
-    "name": "PHYS_VAE_RTM_C_WYTHAM",
+    "name": "PHYS_VAE_RTM_C_WYTHAM_KL",
     "n_gpu": 1,
     "arch": {
         "type": "PHYS_VAE",
@@ -9,8 +9,8 @@
             "hidden_dim": 7,
             "rtm_paras": "configs/rtm_paras.json",
             "standardization": {
-                "x_mean": "data/processed/rtm/wytham/train_x_mean.npy",
-                "x_scale": "data/processed/rtm/wytham/train_x_scale.npy"
+                "x_mean": "data/processed/rtm/wytham/insitu_period/train_x_mean.npy",
+                "x_scale": "data/processed/rtm/wytham/insitu_period/train_x_scale.npy"
             }
         },
         "phys_vae": {
@@ -33,15 +33,15 @@
     "data_loader": {
         "type": "SpectrumS2DataLoader",
         "args": {
-            "data_dir": "data/processed/rtm/wytham/train.csv",
+            "data_dir": "data/processed/rtm/wytham/insitu_period/train.csv",
             "batch_size": 256,
             "shuffle": true,
             "validation_split": 0.0,
             "num_workers": 4,
             "with_const": true
         },
-        "data_dir_valid": "data/processed/rtm/wytham/valid.csv",
-        "data_dir_test": "data/processed/rtm/wytham/test.csv"
+        "data_dir_valid": "data/processed/rtm/wytham/insitu_period/valid.csv",
+        "data_dir_test": "data/processed/rtm/wytham/insitu_period/test.csv"
     },
     "optimizer": {
         "type": "Adam",
@@ -80,7 +80,7 @@
         "wandb": false,
         "phys_vae": {
             "epochs_pretrain": 0,
-            "x_lnvar": -9.0,
+            "x_lnvar": -9,
             "balance_kld": 1,
             "balance_lact_enc": 0.1,
             "balance_unmix": 0.1,

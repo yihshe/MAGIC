@@ -17,7 +17,13 @@ CSV_PATH1 = os.path.join(
     BASE_PATH, 'rtm/models/PHYS_VAE_RTM_B_WYTHAM/0323_222945/model_best_testset_analyzer.csv')
 CSV_PATH2 = os.path.join(
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0329_075709/model_best_testset_analyzer.csv')
-    BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0323_204415/model_best_testset_analyzer.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0323_204415/model_best_testset_analyzer.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_1/0406_094832/model_best_testset_analyzer.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3/0406_105747/model_best_testset_analyzer.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3_prior_std0.1/0406_114131/model_best_testset_analyzer.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.1/0407_102159/model_best_testset_analyzer.csv')
+    BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.2/0407_120629/model_best_testset_analyzer.csv')
+
 # CSV_PATH3 = os.path.join(
 #     BASE_PATH, 'NNRegressor/0124_160519/model_best_testset_analyzer_real.csv')
 
@@ -29,7 +35,13 @@ CSV_PATH2 = os.path.join(
 
 SAVE_PATH = os.path.join(BASE_PATH, 
                         #  'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0329_075709/plots')
-                        'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0323_204415/plots')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM/0323_204415/plots')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_1/0406_094832/plots')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3/0406_105747/plots')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3_prior_std0.1/0406_114131/plots')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.1/0407_102159/plots')
+                        'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.2/0407_120629/plots')
+
 
 
 S2_BANDS = ['B02_BLUE', 'B03_GREEN', 'B04_RED', 'B05_RE1', 'B06_RE2',
@@ -40,7 +52,9 @@ S2_names = {
     'B06_RE2': 'B6', 'B07_RE3': 'B7', 'B08_NIR1': 'B8', 'B8A_NIR2': 'B8a',
     'B09_WV': 'B9', 'B11_SWI1': 'B11', 'B12_SWI2': 'B12'
 }
-rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
+# rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
+rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras_exp.json'))
+
 ATTRS = list(rtm_paras.keys())
 # for each attr in ATTRS, create a LaTex variable name like $Z_{\mathrm{attr}}$
 ATTRS_LATEX = {
@@ -89,10 +103,11 @@ deciduous = ['Prunus spp', 'Fagus sylvatica', 'Carpinus betulus', 'Quercus spp',
 # dates = ['2018.04.08', '2018.04.21', '2018.05.06', '2018.07.02', '2018.08.09', 
 #          '2018.08.21', '2018.08.29', '2018.09.13', '2018.09.18', '2018.09.28', 
 #          '2018.09.30', '2018.10.05', '2018.10.10', '2018.10.30']
-dates = ['2018.04.20', '2018.05.05', '2018.05.07', '2018.05.15', '2018.05.17', 
-         '2018.06.06', '2018.06.11', '2018.06.26', '2018.06.29', '2018.07.06', 
-         '2018.07.11', '2018.07.24', '2018.08.05', '2018.09.02', '2018.09.27', 
-         '2018.10.09', '2018.10.19', '2018.10.22']
+# dates = ['2018.04.20', '2018.05.05', '2018.05.07', '2018.05.15', '2018.05.17', 
+#          '2018.06.06', '2018.06.11', '2018.06.26', '2018.06.29', '2018.07.06', 
+#          '2018.07.11', '2018.07.24', '2018.08.05', '2018.09.02', '2018.09.27', 
+#          '2018.10.09', '2018.10.19', '2018.10.22']
+dates = ['2018.06.26', '2018.06.29', '2018.07.06', '2018.07.11']
 
 def r_square(y, y_hat):
     ss_res = np.sum((y - y_hat) ** 2)
@@ -116,14 +131,14 @@ fig, axs = plt.subplots(2,4, figsize = (26, 10))
 for i, attr in enumerate(ATTRS):
     ax=axs[i//4, i % 4]
     # ax = axs[i]
-    sns.histplot(
-        df1[f'latent_{attr}'].values,
-        bins=NUM_BINS,
-        ax=ax,
-        color='red',
-        label='w/o $\mathbf{C}$',
-        alpha=0.5,
-    )
+    # sns.histplot(
+    #     df1[f'latent_{attr}'].values,
+    #     bins=NUM_BINS,
+    #     ax=ax,
+    #     color='red',
+    #     label='w/o $\mathbf{C}$',
+    #     alpha=0.5,
+    # )
     # sns.histplot(
     #     df3[f'latent_{attr}'].values,
     #     bins=NUM_BINS,

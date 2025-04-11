@@ -18,7 +18,7 @@ S2_BANDS = ['B02_BLUE', 'B03_GREEN', 'B04_RED', 'B05_RE1', 'B06_RE2',
 ATTRS = ['sample_id', 'date']
 
 BASE_DIR = "/maps/ys611/MAGIC/data/raw/wytham"
-SAVE_DIR = os.path.join("/maps/ys611/MAGIC/data/processed/rtm/wytham")
+SAVE_DIR = os.path.join("/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period")
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 SAVE_DIR_TRAIN = os.path.join(SAVE_DIR, "train.csv")
@@ -34,6 +34,11 @@ SAMPLE_RATIO = 0.5
 SPLIT_RATIO = 0.2
 
 csv_s2_2018 = pd.read_csv(CSV_S2_2018_DIR)
+
+# Filter the data to only include the dates of interest
+dates = ['2018.06.26', '2018.06.29', '2018.07.06', '2018.07.11']
+csv_s2_2018 = csv_s2_2018[csv_s2_2018["date"].isin(dates)]
+
 sample_ids = csv_s2_2018["sample_id"].unique()
 # TODO sample a subset of the data based on the sample id and the sample ratio
 sample_ids = np.random.choice(sample_ids, int(len(sample_ids)*SAMPLE_RATIO), replace=False)

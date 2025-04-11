@@ -35,6 +35,7 @@ class PhysVAETrainer(BaseTrainer):
         # TODO check the weight used for KL divergence in general: 1) weight extremely small, same as AE? 
         # 2) we have already applied a physical range as a prior, what we learn is a unit vector
         # 3) the physical model is determinstic, then whether variational is necessary or not.
+        
         self.kl_loss_weight = config['trainer']['phys_vae']['balance_kld'] + config['trainer']['phys_vae']['balance_lact_enc'] 
         # self.kl_loss_weight = config['trainer']['phys_vae']['balance_kld'] 
         self.unmix_loss_weight = config['trainer']['phys_vae']['balance_unmix']
@@ -129,8 +130,9 @@ class PhysVAETrainer(BaseTrainer):
                 #     + self.synthetic_data_loss_weight * synthetic_data_loss \
                 #     + self.least_action_loss_weight * least_action_loss
                 
+                # NOTE for experiments before 2025.04.06, + self.kl_loss_weight * kl_loss * x_var.detach() \
                 loss = rec_loss \
-                    + self.kl_loss_weight * kl_loss * x_var.detach() \
+                    + self._loss_weight(rec_loss, kl_loss) * kl_loss \
                     + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
                     + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
                     + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
@@ -330,4 +332,3 @@ class PhysVAETrainer(BaseTrainer):
         reg_loss_mag = 10 ** torch.floor(torch.log10(reg_loss + 1e-6))
         weight = rec_loss_mag / max(reg_loss_mag, 1e-6)
         return weight.detach()/10 # One order of magnitude smaller
-
