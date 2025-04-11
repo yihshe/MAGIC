@@ -1,3 +1,8 @@
+"""
+Simplified version of PhysVAE for ablation study.
+TODO - Rename some variables to avoid confusion
+TODO - Remove unnecessary lines of code
+"""
 import os
 import numpy as np
 import torch
@@ -27,7 +32,7 @@ class Encoders(nn.Module):
         no_phy = config['arch']['phys_vae']['no_phy']
         dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2']#2
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy']#7 for RTM, 4 for Mogi
-        activation = config['arch']['phys_vae']['activation'] #TODO same as galaxy for gaussian sampling
+        activation = config['arch']['phys_vae']['activation'] #same as galaxy example for gaussian sampling
         num_units_feat = config['arch']['phys_vae']['num_units_feat']#128
         
         self.func_feat = FeatureExtractor(config)
@@ -39,7 +44,7 @@ class Encoders(nn.Module):
 
         if not no_phy:
             hidlayers_z_phy = config['arch']['phys_vae']['hidlayers_z_phy'] #[64, 32]
-            self.func_unmixer_coeff = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[in_channels,], activation), nn.Tanh())
+            # self.func_unmixer_coeff = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[in_channels,], activation), nn.Tanh())
             self.func_z_phy_mean = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation), nn.Softplus()) 
             self.func_z_phy_lnvar = MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation) 
 
@@ -50,17 +55,19 @@ class Decoders(nn.Module):
         in_channels = config['arch']['args']['input_dim'] #11 for RTM, 36 for Mogi
         dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2'] #2
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy'] #7 for RTM, 4 for Mogi
-        activation = config['arch']['phys_vae']['activation'] #elu TODO relu or elu?
+        activation = config['arch']['phys_vae']['activation'] #elu 
         no_phy = config['arch']['phys_vae']['no_phy']
-        x_lnvar = config['trainer']['phys_vae']['x_lnvar'] #TODO not sure how its value is set exactly
+        # x_lnvar = config['trainer']['phys_vae']['x_lnvar'] # default -9, does not make much sense
         
-        self.register_buffer('param_x_lnvar', torch.ones(1)*x_lnvar)
+        # self.register_buffer('param_x_lnvar', torch.ones(1)*x_lnvar)
 
         if not no_phy:
             if dim_z_aux2 >= 0:
                 # phy (and aux) -> x
-                self.func_aux2_expand = MLP([dim_z_phy+dim_z_aux2, 32, 64, in_channels], activation)
-                self.func_aux2_map = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)            
+                # self.func_aux2_expand = MLP([dim_z_phy+dim_z_aux2, 32, 64, in_channels], activation)
+                # TODO rename func_aux2_expand to func_aux2_res
+                self.func_aux2_expand = MLP([dim_z_aux2, 32, 64, in_channels], activation)#TODO decoding dimension of auxiliary variables, should be same as z_phys
+                # self.func_aux2_map = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)#NOTE (optional) additional non-linear correction optional           
 
         else:
             # no phy
@@ -73,7 +80,7 @@ class FeatureExtractor(nn.Module):
         in_channels = config['arch']['args']['input_dim']#11 for RTM, 36 for Mogi
         hidlayers_feat = config['arch']['phys_vae']['hidlayers_feat']#[64, 64]
         num_units_feat = config['arch']['phys_vae']['num_units_feat']#128
-        activation = config['arch']['phys_vae']['activation']#TODO relu or elu?
+        activation = config['arch']['phys_vae']['activation']#elu
     
         # Shared backbone for feature extraction)
         self.func_feat = MLP([in_channels,]+hidlayers_feat+[num_units_feat,], activation)
@@ -86,7 +93,6 @@ class FeatureExtractor(nn.Module):
 class Physics_RTM(nn.Module):
     def __init__(self, config:dict):
         super(Physics_RTM, self).__init__()
-        # TODO implement for Mogi
         self.model = RTM()
         self.z_phy_ranges = json.load(open(os.path.join(PARENT_DIR, config['arch']['args']['rtm_paras']), 'r'))
         self.bands_index = [i for i in range(
@@ -201,7 +207,6 @@ class PHYS_VAE(nn.Module):
             raise ValueError("Unknown model type")
 
     def priors(self, n:int, device:torch.device):
-        # NOTE the prior before is problematic, as I wrongly set the z_phy_mean as zero
         # prior_z_phy_mean = torch.cat([
         #     torch.ones(n,1,device=device) * 0.5 * (0 + 1) for i in range(self.dim_z_phy)
         # ], dim=1)
@@ -209,13 +214,14 @@ class PHYS_VAE(nn.Module):
         #     torch.ones(n,1,device=device) * max(1e-3, 0.866*(1 - 0)) for i in range(self.dim_z_phy)
         # ], dim=1)
 
+        # NOTE KL term for z_phy can be removed later on
         prior_z_phy_mean = torch.full((n, self.dim_z_phy), 0.5, device=device)  # mean = 0.5
         prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.1, device=device)   # std = 0.1
-        # prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.2, device=device)
 
-        prior_z_phy_stat = {'mean': prior_z_phy_mean, 'lnvar': 2.0*torch.log(prior_z_phy_std)}#TODO check lnvar and reparameterization
+        prior_z_phy_stat = {'mean': prior_z_phy_mean, 'lnvar': 2.0*torch.log(prior_z_phy_std)}
         prior_z_aux2_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux2), device=device),
-                             'lnvar': torch.zeros(n, max(0,self.dim_z_aux2), device=device)}
+                            'lnvar': torch.zeros(n, max(0,self.dim_z_aux2), device=device)}
+        
         return prior_z_phy_stat, prior_z_aux2_stat
 
 
@@ -228,11 +234,12 @@ class PHYS_VAE(nn.Module):
         if not self.no_phy:
             # with physics
             y = self.physics_model(z_phy, const=const) # (n, in_channels)
-            # x_P = y.repeat(1,3,1,1)
             x_P = y
             if self.dim_z_aux2 >= 0:
-                expanded = self.dec.func_aux2_expand(torch.cat([z_phy, z_aux2], dim=1))
-                x_PB = self.dec.func_aux2_map(torch.cat([x_P, expanded], dim=1))
+                # expanded = self.dec.func_aux2_expand(torch.cat([z_phy, z_aux2], dim=1))
+                correction = self.dec.func_aux2_expand(z_aux2) # (n, in_channels)
+                x_PB = x_P + correction
+                # x_PB = self.dec.func_aux2_map(torch.cat([x_P, expanded], dim=1))
             else:
                 x_PB = x_P.clone() # No correction if no auxiliary variables (dim_z_aux2 = -1)
         else:
@@ -245,9 +252,9 @@ class PHYS_VAE(nn.Module):
             x_P = x_PB.clone()
 
         if full:
-            return x_PB, x_P, self.dec.param_x_lnvar, y
+            return x_PB, x_P, y
         else:
-            return x_PB, self.dec.param_x_lnvar
+            return x_PB
 
 
     def encode(self, x:torch.Tensor):
@@ -265,20 +272,22 @@ class PHYS_VAE(nn.Module):
 
         # infer z_phy
         if not self.no_phy:
-            coeff = self.enc.func_unmixer_coeff(feature_aux2) # (n,11) for RTM, (n,36) for Mogi
-            unmixed = x_ * coeff # element-wise weighting for 1D data
-            feature_phy = self.enc.func_feat(unmixed)
+            # coeff = self.enc.func_unmixer_coeff(feature_aux2) # (n,11) for RTM, (n,36) for Mogi
+            # unmixed = x_ * coeff # element-wise weighting for 1D data
+            # feature_phy = self.enc.func_feat(unmixed)
+            feature_phy = feature_aux2
             z_phy_stat = {'mean': self.enc.func_z_phy_mean(feature_phy), 'lnvar': self.enc.func_z_phy_lnvar(feature_phy)}
         else:
-            unmixed = torch.zeros(n, self.in_channels, device=device)
+            # unmixed = torch.zeros(n, self.in_channels, device=device)
             z_phy_stat = {'mean':torch.empty(n, 0, device=device), 'lnvar':torch.empty(n, 0, device=device)}
 
-        return z_phy_stat, z_aux2_stat, unmixed
+        # return z_phy_stat, z_aux2_stat, unmixed
+        return z_phy_stat, z_aux2_stat
 
 
     def draw(self, z_phy_stat:dict, z_aux2_stat:dict, hard_z:bool=False):
         if not hard_z:
-            z_phy = draw_normal(z_phy_stat['mean'], z_phy_stat['lnvar'])#TODO check lnvar and reparameterization
+            z_phy = draw_normal(z_phy_stat['mean'], z_phy_stat['lnvar'])
             z_aux2 = draw_normal(z_aux2_stat['mean'], z_aux2_stat['lnvar'])
         else:
             z_phy = z_phy_stat['mean'].clone()
@@ -293,17 +302,18 @@ class PHYS_VAE(nn.Module):
 
     def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False,
                 inference:bool=False, const:dict=None):
-        z_phy_stat, z_aux2_stat, unmixed, = self.encode(x)
+        # z_phy_stat, z_aux2_stat, unmixed, = self.encode(x)
+        z_phy_stat, z_aux2_stat = self.encode(x)
 
         if not reconstruct:
             return z_phy_stat, z_aux2_stat
         
         if not inference:
             # draw & reconstruction
-            x_mean, x_lnvar = self.decode(*self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z), full=False, const=const)
+            x_mean = self.decode(*self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z), full=False, const=const)
 
-            return z_phy_stat, z_aux2_stat, x_mean, x_lnvar
+            return z_phy_stat, z_aux2_stat, x_mean
         else:
             z_phy, z_aux2 = self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z)
-            x_PB, x_P, x_lnvar, y = self.decode(z_phy, z_aux2, full=True, const=const)
+            x_PB, x_P, y = self.decode(z_phy, z_aux2, full=True, const=const)
             return z_phy, z_aux2, x_PB, x_P
