@@ -30,22 +30,23 @@ class Encoders(nn.Module):
 
         in_channels = config['arch']['args']['input_dim'] #11 for RTM, 36 for Mogi
         no_phy = config['arch']['phys_vae']['no_phy']
-        dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2']#2
+        dim_z_aux = config['arch']['phys_vae']['dim_z_aux']#2
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy']#7 for RTM, 4 for Mogi
         activation = config['arch']['phys_vae']['activation'] #same as galaxy example for gaussian sampling
         num_units_feat = config['arch']['phys_vae']['num_units_feat']#128
         
         self.func_feat = FeatureExtractor(config)
 
-        if dim_z_aux2 > 0:
-            hidlayers_aux2_enc = config['arch']['phys_vae']['hidlayers_aux2_enc'] #[64, 32]
-            self.func_z_aux2_mean = MLP([num_units_feat,]+hidlayers_aux2_enc+[dim_z_aux2,], activation)
-            self.func_z_aux2_lnvar = MLP([num_units_feat,]+hidlayers_aux2_enc+[dim_z_aux2,], activation)
+        if dim_z_aux > 0:
+            # hidlayers_aux_enc = config['arch']['phys_vae']['hidlayers_aux_enc'] #[64, 32] TODO change the config too
+            hidlayers_z_aux = config['arch']['phys_vae']['hidlayers_z_aux'] #[64, 32]
+            self.func_z_aux_mean = MLP([num_units_feat,]+hidlayers_z_aux+[dim_z_aux,], activation)
+            self.func_z_aux_lnvar = MLP([num_units_feat,]+hidlayers_z_aux+[dim_z_aux,], activation)
 
         if not no_phy:
             hidlayers_z_phy = config['arch']['phys_vae']['hidlayers_z_phy'] #[64, 32]
             # self.func_unmixer_coeff = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[in_channels,], activation), nn.Tanh())
-            self.func_z_phy_mean = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation), nn.Softplus()) 
+            self.func_z_phy_mean = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation), nn.Softplus()) #NOTE Softplus is used to ensure positive values
             self.func_z_phy_lnvar = MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation) 
 
 class Decoders(nn.Module):
@@ -53,7 +54,7 @@ class Decoders(nn.Module):
         super(Decoders, self).__init__()
 
         in_channels = config['arch']['args']['input_dim'] #11 for RTM, 36 for Mogi
-        dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2'] #2
+        dim_z_aux = config['arch']['phys_vae']['dim_z_aux'] #2
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy'] #7 for RTM, 4 for Mogi
         activation = config['arch']['phys_vae']['activation'] #elu 
         no_phy = config['arch']['phys_vae']['no_phy']
@@ -61,17 +62,18 @@ class Decoders(nn.Module):
         
         # self.register_buffer('param_x_lnvar', torch.ones(1)*x_lnvar)
 
+        # NOTE variable names can be simplified.
         if not no_phy:
-            if dim_z_aux2 >= 0:
+            if dim_z_aux >= 0:
                 # phy (and aux) -> x
-                # self.func_aux2_expand = MLP([dim_z_phy+dim_z_aux2, 32, 64, in_channels], activation)
-                # TODO rename func_aux2_expand to func_aux2_res
-                self.func_aux2_expand = MLP([dim_z_aux2, 32, 64, in_channels], activation)#TODO decoding dimension of auxiliary variables, should be same as z_phys
-                # self.func_aux2_map = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)#NOTE (optional) additional non-linear correction optional           
+                # self.func_aux_expand = MLP([dim_z_phy+dim_z_aux, 32, 64, in_channels], activation)
+                # TODO rename func_aux_expand to func_aux_res
+                self.func_aux_expand = MLP([dim_z_aux, 32, 64, in_channels], activation)
+                # self.func_aux_map = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)#NOTE (optional) additional non-linear correction optional           
 
         else:
             # no phy
-            self.func_aux2_dec = MLP([dim_z_aux2, 16, 32, 64, in_channels], activation)
+            self.func_aux_dec = MLP([dim_z_aux, 32, 64, in_channels], activation) #TODO decide the decoding dimension, whether adding 16 dimension or not
 
 class FeatureExtractor(nn.Module):
     def __init__(self, config:dict):
@@ -82,7 +84,7 @@ class FeatureExtractor(nn.Module):
         num_units_feat = config['arch']['phys_vae']['num_units_feat']#128
         activation = config['arch']['phys_vae']['activation']#elu
     
-        # Shared backbone for feature extraction)
+        # Shared backbone for feature extraction
         self.func_feat = MLP([in_channels,]+hidlayers_feat+[num_units_feat,], activation)
 
 
@@ -183,7 +185,7 @@ class PHYS_VAE(nn.Module):
         super(PHYS_VAE, self).__init__()
 
         self.no_phy = config['arch']['phys_vae']['no_phy']
-        self.dim_z_aux2 = config['arch']['phys_vae']['dim_z_aux2']
+        self.dim_z_aux = config['arch']['phys_vae']['dim_z_aux']
         self.dim_z_phy = config['arch']['phys_vae']['dim_z_phy']
         self.activation = config['arch']['phys_vae']['activation']
         self.in_channels = config['arch']['args']['input_dim']
@@ -219,10 +221,10 @@ class PHYS_VAE(nn.Module):
         prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.1, device=device)   # std = 0.1
 
         prior_z_phy_stat = {'mean': prior_z_phy_mean, 'lnvar': 2.0*torch.log(prior_z_phy_std)}
-        prior_z_aux2_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux2), device=device),
-                            'lnvar': torch.zeros(n, max(0,self.dim_z_aux2), device=device)}
+        prior_z_aux_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux), device=device),
+                            'lnvar': torch.zeros(n, max(0,self.dim_z_aux), device=device)}
         
-        return prior_z_phy_stat, prior_z_aux2_stat
+        return prior_z_phy_stat, prior_z_aux_stat
 
 
     def generate_physonly(self, z_phy:torch.Tensor, const:dict=None):
@@ -230,23 +232,24 @@ class PHYS_VAE(nn.Module):
         return y
 
 
-    def decode(self, z_phy:torch.Tensor, z_aux2:torch.Tensor, full:bool=False, const:dict=None):
+    def decode(self, z_phy:torch.Tensor, z_aux:torch.Tensor, full:bool=False, const:dict=None):
+        # NOTE this function can be simplified with more clear variable names. For now, it is kept similar to the original code.
         if not self.no_phy:
             # with physics
             y = self.physics_model(z_phy, const=const) # (n, in_channels)
             x_P = y
-            if self.dim_z_aux2 >= 0:
-                # expanded = self.dec.func_aux2_expand(torch.cat([z_phy, z_aux2], dim=1))
-                correction = self.dec.func_aux2_expand(z_aux2) # (n, in_channels)
+            if self.dim_z_aux >= 0:
+                # expanded = self.dec.func_aux_expand(torch.cat([z_phy, z_aux], dim=1))
+                correction = self.dec.func_aux_expand(z_aux) # (n, in_channels)
                 x_PB = x_P + correction
-                # x_PB = self.dec.func_aux2_map(torch.cat([x_P, expanded], dim=1))
+                # x_PB = self.dec.func_aux_map(torch.cat([x_P, expanded], dim=1))
             else:
-                x_PB = x_P.clone() # No correction if no auxiliary variables (dim_z_aux2 = -1)
+                x_PB = x_P.clone() # No correction if no auxiliary variables (dim_z_aux = -1)
         else:
             # no physics 
             y = torch.zeros(z_phy.shape[0], self.in_channels)
-            if self.dim_z_aux2 >= 0:
-                x_PB = self.dec.func_aux2_dec(z_aux2) 
+            if self.dim_z_aux >= 0:
+                x_PB = self.dec.func_aux_dec(z_aux) 
             else:
                x_PB = torch.zeros(z_phy.shape[0], self.in_channels)
             x_P = x_PB.clone()
@@ -263,57 +266,57 @@ class PHYS_VAE(nn.Module):
         n = x_.shape[0]
         device = x_.device
 
-        # infer z_aux2
-        feature_aux2 = self.enc.func_feat(x_)
-        if self.dim_z_aux2 > 0:
-            z_aux2_stat = {'mean':self.enc.func_z_aux2_mean(feature_aux2), 'lnvar':self.enc.func_z_aux2_lnvar(feature_aux2)}
+        # infer z_aux
+        feature_aux = self.enc.func_feat(x_)
+        if self.dim_z_aux > 0:
+            z_aux_stat = {'mean':self.enc.func_z_aux_mean(feature_aux), 'lnvar':self.enc.func_z_aux_lnvar(feature_aux)}
         else:
-            z_aux2_stat = {'mean':torch.empty(n, 0, device=device), 'lnvar':torch.empty(n, 0, device=device)}
+            z_aux_stat = {'mean':torch.empty(n, 0, device=device), 'lnvar':torch.empty(n, 0, device=device)}
 
         # infer z_phy
         if not self.no_phy:
-            # coeff = self.enc.func_unmixer_coeff(feature_aux2) # (n,11) for RTM, (n,36) for Mogi
+            # coeff = self.enc.func_unmixer_coeff(feature_aux) # (n,11) for RTM, (n,36) for Mogi
             # unmixed = x_ * coeff # element-wise weighting for 1D data
             # feature_phy = self.enc.func_feat(unmixed)
-            feature_phy = feature_aux2
+            feature_phy = feature_aux
             z_phy_stat = {'mean': self.enc.func_z_phy_mean(feature_phy), 'lnvar': self.enc.func_z_phy_lnvar(feature_phy)}
         else:
             # unmixed = torch.zeros(n, self.in_channels, device=device)
             z_phy_stat = {'mean':torch.empty(n, 0, device=device), 'lnvar':torch.empty(n, 0, device=device)}
 
-        # return z_phy_stat, z_aux2_stat, unmixed
-        return z_phy_stat, z_aux2_stat
+        # return z_phy_stat, z_aux_stat, unmixed
+        return z_phy_stat, z_aux_stat
 
 
-    def draw(self, z_phy_stat:dict, z_aux2_stat:dict, hard_z:bool=False):
+    def draw(self, z_phy_stat:dict, z_aux_stat:dict, hard_z:bool=False):
         if not hard_z:
             z_phy = draw_normal(z_phy_stat['mean'], z_phy_stat['lnvar'])
-            z_aux2 = draw_normal(z_aux2_stat['mean'], z_aux2_stat['lnvar'])
+            z_aux = draw_normal(z_aux_stat['mean'], z_aux_stat['lnvar'])
         else:
             z_phy = z_phy_stat['mean'].clone()
-            z_aux2 = z_aux2_stat['mean'].clone()
+            z_aux = z_aux_stat['mean'].clone()
 
         # cut infeasible regions
         if not self.no_phy:
             z_phy = torch.clamp(z_phy, 0, 1)
 
-        return z_phy, z_aux2
+        return z_phy, z_aux
 
 
     def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False,
                 inference:bool=False, const:dict=None):
-        # z_phy_stat, z_aux2_stat, unmixed, = self.encode(x)
-        z_phy_stat, z_aux2_stat = self.encode(x)
+        # z_phy_stat, z_aux_stat, unmixed, = self.encode(x)
+        z_phy_stat, z_aux_stat = self.encode(x)
 
         if not reconstruct:
-            return z_phy_stat, z_aux2_stat
+            return z_phy_stat, z_aux_stat
         
         if not inference:
             # draw & reconstruction
-            x_mean = self.decode(*self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z), full=False, const=const)
+            x_mean = self.decode(*self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z), full=False, const=const)
 
-            return z_phy_stat, z_aux2_stat, x_mean
+            return z_phy_stat, z_aux_stat, x_mean
         else:
-            z_phy, z_aux2 = self.draw(z_phy_stat, z_aux2_stat, hard_z=hard_z)
-            x_PB, x_P, y = self.decode(z_phy, z_aux2, full=True, const=const)
-            return z_phy, z_aux2, x_PB, x_P
+            z_phy, z_aux = self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z)
+            x_PB, x_P, y = self.decode(z_phy, z_aux, full=True, const=const)
+            return z_phy, z_aux, x_PB, x_P
