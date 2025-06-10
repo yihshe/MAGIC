@@ -15,7 +15,7 @@
         },
         "phys_vae": {
             "no_phy": false,
-            "dim_z_aux2": 2,
+            "dim_z_aux": 3,
             "dim_z_phy": 7,
             "activation": "elu",
             "hidlayers_feat": [
@@ -56,12 +56,12 @@
     "lr_scheduler": {
         "type": "StepLR",
         "args": {
-            "step_size": 50,
+            "step_size": 75,
             "gamma": 0.1
         }
     },
     "trainer": {
-        "epochs": 100,
+        "epochs": 125,
         "save_dir": "saved/rtm",
         "save_period": 10,
         "log_step": 5,
@@ -79,13 +79,9 @@
         "tensorboard": false,
         "wandb": false,
         "phys_vae": {
-            "epochs_pretrain": 0,
-            "x_lnvar": -9,
+            "epochs_pretrain": 25,
             "balance_kld": 1,
-            "balance_lact_enc": 0.1,
-            "balance_unmix": 0.1,
-            "balance_data_aug": 0.1,
-            "balance_lact_dec": 0.1
+            "balance_lact": 0.1
         }
     }
 }

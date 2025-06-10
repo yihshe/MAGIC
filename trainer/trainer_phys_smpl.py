@@ -12,7 +12,7 @@ import wandb
 from model.loss import mse_loss, mse_loss_per_channel
 from IPython import embed
 
-class PhysVAETrainer(BaseTrainer):
+class PhysVAETrainerSMPL(BaseTrainer):
     """
     Trainer for Phys-VAE, with options for physics-based regularization and reconstruction.
     """
@@ -36,22 +36,16 @@ class PhysVAETrainer(BaseTrainer):
         self.dim_z_phy = config['arch']['phys_vae']['dim_z_phy'] #7 for RTM, 4 for Mogi
 
         # Phys-VAE specific configurations
-        # TODO check the weight used for KL divergence in general: 1) weight extremely small, same as AE? 
-        # 2) we have already applied a physical range as a prior, what we learn is a unit vector
-        # 3) the physical model is determinstic, then whether variational is necessary or not.
-        
-        # self.kl_loss_weight = config['trainer']['phys_vae']['balance_kld'] + config['trainer']['phys_vae']['balance_lact_enc'] 
         self.kl_loss_weight = config['trainer']['phys_vae']['balance_kld'] #NOTE modify the config file accordingly
-        # self.unmix_loss_weight = config['trainer']['phys_vae']['balance_unmix']
         # self.synthetic_data_loss_weight = config['trainer']['phys_vae']['balance_data_aug']
-        self.least_action_loss_weight = config['trainer']['phys_vae']['balance_lact_dec']
-        
+        self.least_action_loss_weight = config['trainer']['phys_vae']['balance_lact']
+    
         # Metric tracker
         # self.train_metrics = MetricTracker(
         #     'loss', 'rec_loss', 'kl_loss', 'unmix_loss', 'syn_data_loss', 'least_act_loss', 'smoothness_loss',
         #     *[m.__name__ for m in metric_ftns], writer=self.writer)
         self.train_metrics = MetricTracker(
-            'loss', 'rec_loss', 'kl_loss', 'syn_data_loss', 'least_act_loss', 'smoothness_loss',
+            'loss', 'rec_loss', 'kl_loss', 'least_act_loss', 'smoothness_loss',
             *[m.__name__ for m in metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker(
             'rec_loss', 'kl_loss',
@@ -97,55 +91,33 @@ class PhysVAETrainer(BaseTrainer):
             self.optimizer.zero_grad()
 
             # Encode step: Infer latent variables
-            # z_phy_stat, z_aux_stat, unmixed = self.model.encode(data)
             z_phy_stat, z_aux_stat = self.model.encode(data)
 
             # Draw step: Sample latent variables
             z_phy, z_aux = self.model.draw(z_phy_stat, z_aux_stat, hard_z=False)
 
             # Decode step: Reconstruct outputs
-            x_PB, x_P, y = self.model.decode(z_phy, z_aux, full=True, const = input_const)
-
-            # Reconstruction variance
-            # x_var = torch.exp(x_lnvar)
-
-            # Loss calculations
-            # ELBO loss #NOTE here it's sample-wise loss, not element-wise loss
-            rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
-            
-            # Unmixing regularization (R_{DA,1})
-            # unmix_loss = self._unmixing_loss(unmixed, y)  # Unmixing regularization TODO reg_unmix (R_{DA,1})
-
-            # Synthetic data regularization (R_{DA,2}) #NOTE this part can be ablated
-            # synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
-
-            # Least action regularization (R_{ppc}) 
-            least_action_loss = self._least_action_loss(x_PB, x_P) 
+            x_PB, x_P, _ = self.model.decode(z_phy, z_aux, full=True, const = input_const)
 
             # Sequence smoothness regularization (for Mogi model) #NOTE used only in Mogi model
             smoothness_loss = self._sequence_smoothness_loss(x_P, seqence_len)
 
-            
-            # Total loss 
-            if not self.no_phy and epoch < self.epochs_pretrain: 
-                # NOTE this pretraining setting has not been experimented yet
-                # TODO this pretraining can be used as an ablation study to increase the model reliance on the physics model
-                # Pretraining phase, not used in default setting
-                # loss = self.synthetic_data_loss_weight * synthetic_data_loss
-                pass
+            # Loss calculations
+            # ELBO loss #NOTE here it's sample-wise loss, not element-wise loss
+            if not self.no_phy and epoch < self.epochs_pretrain:
+                rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_P, pretrain=True)
+                loss = rec_loss \
+                       + self._linear_annealing_epoch(epoch) * kl_loss \
+                       + 0.01 * smoothness_loss  # NOTE no least action loss in pretraining phase
             else:
-                # Training phase 
-                # loss = rec_loss \
-                #     + self.kl_loss_weight * kl_loss * x_var.detach() \
-                #     + self.unmix_loss_weight * unmix_loss \
-                #     + self.synthetic_data_loss_weight * synthetic_data_loss \
-                #     + self.least_action_loss_weight * least_action_loss
+                rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
                 
-                # NOTE wight for the least_action_loss can be fixed
-                # loss = rec_loss \
-                #     + self._loss_weight(rec_loss, kl_loss) * kl_loss \
-                #     + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
-                #     + 0.01 * smoothness_loss
+                # Synthetic data regularization (R_{DA,2}) #NOTE this part can be ablated
+                # synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
+
+                # Least action regularization (R_{ppc}) 
+                least_action_loss = self._least_action_loss(x_PB, x_P) 
+                # Compute the loss
                 loss = rec_loss \
                     + self._linear_annealing_epoch(epoch) * kl_loss \
                     + self._linear_annealing_epoch(epoch) * least_action_loss \
@@ -154,19 +126,17 @@ class PhysVAETrainer(BaseTrainer):
             # Backpropagation
             loss.backward()
 
-            # TODO gradient clipping or stabilisation
-            # if args.grad_clip>0.0:
-            # torch.nn.utils.clip_grad_value_(model.parameters(), args.grad_clip)
+            # gradient stabilisation
+
             if self.stablize_grad:
                 self._grad_stablizer(epoch, batch_idx, loss.item())
 
             self.optimizer.step()
 
-            # Update metrics TODO double-check this metrics
+            # Update metrics
             self.train_metrics.update('loss', loss.item())
             self.train_metrics.update('rec_loss', rec_loss.item())
             self.train_metrics.update('kl_loss', kl_loss.item())
-            # self.train_metrics.update('unmix_loss', unmix_loss.item())
             # self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
             self.train_metrics.update('least_act_loss', least_action_loss.item())
             self.train_metrics.update('smoothness_loss', smoothness_loss.item())
@@ -176,17 +146,24 @@ class PhysVAETrainer(BaseTrainer):
                 self.logger.info(f"Train Epoch: {epoch} [{batch_idx}/{len(self.data_loader)}] "
                                  f"Loss: {loss.item():.6f} Rec Loss: {rec_loss.item():.6f} "
                                  f"KL Loss: {kl_loss.item():.6f} "
-                                #  f"Unmix Loss: {unmix_loss.item():.6f} "
                                 #  f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
                                  f"Least Action Loss: {least_action_loss.item():.6f} "
                                  f"Smoothness Loss: {smoothness_loss.item():.6f}")
 
         log = self.train_metrics.result()
 
+        # Log the training metrics to wandb
+        wandb.log({f'train/{key}': value for key, value in log.items()})
+        wandb.log({'train/lr': self.optimizer.param_groups[0]['lr']})
+        wandb.log({'train/epoch': epoch})
+
         # Validation
         if self.do_validation:
             val_log = self._valid_epoch(epoch)
             log.update(**{'val_' + k: v for k, v in val_log.items()})
+            # Log the validation metrics to wandb
+            wandb.log({f'val/{key}': value for key, value in val_log.items()})
+            wandb.log({'val/epoch': epoch})
 
         # Learning rate scheduler
         if self.lr_scheduler is not None:
@@ -231,7 +208,7 @@ class PhysVAETrainer(BaseTrainer):
 
         return self.valid_metrics.result()
 
-    def _vae_loss(self, data, z_phy_stat, z_aux_stat, x):
+    def _vae_loss(self, data, z_phy_stat, z_aux_stat, x, pretrain=False):
         """
         Compute the VAE loss for the model.
 
@@ -242,16 +219,20 @@ class PhysVAETrainer(BaseTrainer):
         :return: Reconstruction loss and KL divergence loss.
         """
         n = data.shape[0]
-        rec_loss = torch.sum((x-data).pow(2), dim=1).mean()
+        rec_loss = mse_loss(x, data)
         prior_z_phy_stat, prior_z_aux_stat = self.model.priors(n, self.device) #TODO
 
         KL_z_phy = kldiv_normal_normal(z_phy_stat['mean'], z_phy_stat['lnvar'],
             prior_z_phy_stat['mean'], prior_z_phy_stat['lnvar']
             ) if not self.no_phy else torch.zeros(1, device=self.device)
         
-        KL_z_aux = kldiv_normal_normal(z_aux_stat['mean'], z_aux_stat['lnvar'],
-            prior_z_aux_stat['mean'], prior_z_aux_stat['lnvar']
-            ) if self.config['arch']['phys_vae']['dim_z_aux'] > 0 else torch.zeros(1, device=self.device)
+        if pretrain:
+            KL_z_aux = torch.zeros(1, device=self.device)
+            # kl_loss = torch.zeros(1, device=self.device)
+        else:
+            KL_z_aux = kldiv_normal_normal(z_aux_stat['mean'], z_aux_stat['lnvar'],
+                prior_z_aux_stat['mean'], prior_z_aux_stat['lnvar']
+                ) if self.config['arch']['phys_vae']['dim_z_aux'] > 0 else torch.zeros(1, device=self.device)
         
         kl_loss = (KL_z_phy + KL_z_aux).mean()
 
@@ -361,8 +342,8 @@ class PhysVAETrainer(BaseTrainer):
             return 1.0
         
     def _cylindrical_annealing_epoch(epoch: int,
-                                cycle_length: int = 10,
-                                ramp_frac: float = 0.5) -> float:
+                                cycle_length: int = 25,
+                                ramp_frac: float = 0.6) -> float:
         """
         Compute a cylindrical (cyclical + flat‐top) annealing factor per‐epoch.
 

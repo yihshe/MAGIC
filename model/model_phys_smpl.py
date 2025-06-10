@@ -180,9 +180,9 @@ class Physics_Mogi(nn.Module):
         output = self.model.run(**z_phy_rescaled)
         return (output - self.x_mean) / self.x_scale 
 
-class PHYS_VAE(nn.Module):
+class PHYS_VAE_SMPL(nn.Module):
     def __init__(self, config:dict):
-        super(PHYS_VAE, self).__init__()
+        super(PHYS_VAE_SMPL, self).__init__()
 
         self.no_phy = config['arch']['phys_vae']['no_phy']
         self.dim_z_aux = config['arch']['phys_vae']['dim_z_aux']
