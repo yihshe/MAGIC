@@ -33,7 +33,7 @@ class Encoders(nn.Module):
         dim_z_aux = config['arch']['phys_vae']['dim_z_aux']#2
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy']#7 for RTM, 4 for Mogi
         activation = config['arch']['phys_vae']['activation'] #same as galaxy example for gaussian sampling
-        num_units_feat = config['arch']['phys_vae']['num_units_feat']#128
+        num_units_feat = config['arch']['phys_vae']['num_units_feat']#64
         
         self.func_feat = FeatureExtractor(config)
 
@@ -66,22 +66,23 @@ class Decoders(nn.Module):
         if not no_phy:
             if dim_z_aux >= 0:
                 # phy (and aux) -> x
-                # self.func_aux_expand = MLP([dim_z_phy+dim_z_aux, 32, 64, in_channels], activation)
                 # TODO rename func_aux_expand to func_aux_res
-                self.func_aux_expand = MLP([dim_z_aux, 32, 64, in_channels], activation)
-                # self.func_aux_map = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)#NOTE (optional) additional non-linear correction optional           
+                # self.func_aux_expand = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
+
+                self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
+                self.func_correction = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)#NOTE (optional) additional non-linear correction optional           
 
         else:
             # no phy
-            self.func_aux_dec = MLP([dim_z_aux, 32, 64, in_channels], activation) #TODO decide the decoding dimension, whether adding 16 dimension or not
+            self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation) #TODO decide the decoding dimension, whether adding 16 dimension or not
 
 class FeatureExtractor(nn.Module):
     def __init__(self, config:dict):
         super(FeatureExtractor, self).__init__()
 
         in_channels = config['arch']['args']['input_dim']#11 for RTM, 36 for Mogi
-        hidlayers_feat = config['arch']['phys_vae']['hidlayers_feat']#[64, 64]
-        num_units_feat = config['arch']['phys_vae']['num_units_feat']#128
+        hidlayers_feat = config['arch']['phys_vae']['hidlayers_feat']#[32,] NOTE change to 36 for Mogi to avoid information loss
+        num_units_feat = config['arch']['phys_vae']['num_units_feat']#64
         activation = config['arch']['phys_vae']['activation']#elu
     
         # Shared backbone for feature extraction
@@ -217,8 +218,8 @@ class PHYS_VAE_SMPL(nn.Module):
         # ], dim=1)
 
         # NOTE KL term for z_phy can be removed later on
-        prior_z_phy_mean = torch.full((n, self.dim_z_phy), 0.5, device=device)  # mean = 0.5
-        prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.1, device=device)   # std = 0.1
+        prior_z_phy_mean = torch.full((n, self.dim_z_phy), 0.5 * (0+1), device=device)  # mean = 0.5
+        prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.866 * (1-0), device=device)   # std = 0.1
 
         prior_z_phy_stat = {'mean': prior_z_phy_mean, 'lnvar': 2.0*torch.log(prior_z_phy_std)}
         prior_z_aux_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux), device=device),
@@ -242,7 +243,8 @@ class PHYS_VAE_SMPL(nn.Module):
                 # expanded = self.dec.func_aux_expand(torch.cat([z_phy, z_aux], dim=1))
                 correction = self.dec.func_aux_expand(z_aux) # (n, in_channels)
                 x_PB = x_P + correction
-                # x_PB = self.dec.func_aux_map(torch.cat([x_P, expanded], dim=1))
+                # expanded = self.dec.func_aux_dec(z_aux) # (n, in_channels)
+                # x_PB = self.dec.func_correction(torch.cat([x_P, expanded], dim=1))
             else:
                 x_PB = x_P.clone() # No correction if no auxiliary variables (dim_z_aux = -1)
         else:
@@ -318,5 +320,5 @@ class PHYS_VAE_SMPL(nn.Module):
             return z_phy_stat, z_aux_stat, x_mean
         else:
             z_phy, z_aux = self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z)
-            x_PB, x_P, y = self.decode(z_phy, z_aux, full=True, const=const)
+            x_PB, x_P, _ = self.decode(z_phy, z_aux, full=True, const=const)
             return z_phy, z_aux, x_PB, x_P

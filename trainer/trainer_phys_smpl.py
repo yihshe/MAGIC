@@ -37,15 +37,15 @@ class PhysVAETrainerSMPL(BaseTrainer):
 
         # Phys-VAE specific configurations
         self.kl_loss_weight = config['trainer']['phys_vae']['balance_kld'] #NOTE modify the config file accordingly
-        # self.synthetic_data_loss_weight = config['trainer']['phys_vae']['balance_data_aug']
         self.least_action_loss_weight = config['trainer']['phys_vae']['balance_lact']
+        self.synthetic_data_loss_weight = config['trainer']['phys_vae']['balance_data_aug']
     
         # Metric tracker
         # self.train_metrics = MetricTracker(
         #     'loss', 'rec_loss', 'kl_loss', 'unmix_loss', 'syn_data_loss', 'least_act_loss', 'smoothness_loss',
         #     *[m.__name__ for m in metric_ftns], writer=self.writer)
         self.train_metrics = MetricTracker(
-            'loss', 'rec_loss', 'kl_loss', 'least_act_loss', 'smoothness_loss',
+            'loss', 'rec_loss', 'kl_loss', 'least_act_loss', 'syn_data_loss', 'smoothness_loss',
             *[m.__name__ for m in metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker(
             'rec_loss', 'kl_loss',
@@ -75,6 +75,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
         
         # Sequence length, for the 'GPSSeqDataLoader' used in Mogi model
         seqence_len = None
+        annealing_weight = self._cylindrical_annealing_epoch(epoch-1)#the epoch starts with 1, but it ought to start with 0 for annealing
 
         for batch_idx, data_dict in enumerate(self.data_loader):
             data = data_dict[self.data_key].to(self.device)
@@ -95,9 +96,16 @@ class PhysVAETrainerSMPL(BaseTrainer):
 
             # Draw step: Sample latent variables
             z_phy, z_aux = self.model.draw(z_phy_stat, z_aux_stat, hard_z=False)
+            # z_phy, z_aux = self.model.draw(z_phy_stat, z_aux_stat, hard_z=True)
 
             # Decode step: Reconstruct outputs
             x_PB, x_P, _ = self.model.decode(z_phy, z_aux, full=True, const = input_const)
+
+            # ELBO loss
+            rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
+
+            # Synthetic data regularization (R_{DA,2})
+            synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
 
             # Sequence smoothness regularization (for Mogi model) #NOTE used only in Mogi model
             smoothness_loss = self._sequence_smoothness_loss(x_P, seqence_len)
@@ -105,10 +113,13 @@ class PhysVAETrainerSMPL(BaseTrainer):
             # Loss calculations
             # ELBO loss #NOTE here it's sample-wise loss, not element-wise loss
             if not self.no_phy and epoch < self.epochs_pretrain:
-                rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_P, pretrain=True)
-                loss = rec_loss \
-                       + self._linear_annealing_epoch(epoch) * kl_loss \
-                       + 0.01 * smoothness_loss  # NOTE no least action loss in pretraining phase
+                # rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_P, pretrain=True)
+                # least_action_loss = torch.zeros(1, device=self.device)
+                # loss = rec_loss \
+                #        + annealing_weight * kl_loss \
+                #        + 0.01 * smoothness_loss  # NOTE no least action loss in pretraining phase
+                loss = self.synthetic_data_loss_weight * synthetic_data_loss 
+                
             else:
                 rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
                 
@@ -118,11 +129,15 @@ class PhysVAETrainerSMPL(BaseTrainer):
                 # Least action regularization (R_{ppc}) 
                 least_action_loss = self._least_action_loss(x_PB, x_P) 
                 # Compute the loss
+                # loss = rec_loss \
+                #     + annealing_weight * kl_loss \
+                #     + 0.1 * least_action_loss \
+                #     + 0.01 * smoothness_loss
                 loss = rec_loss \
-                    + self._linear_annealing_epoch(epoch) * kl_loss \
-                    + self._linear_annealing_epoch(epoch) * least_action_loss \
+                    + self._loss_weight(rec_loss, kl_loss) * kl_loss \
+                    + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
+                    + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
                     + 0.01 * smoothness_loss
-                    
             # Backpropagation
             loss.backward()
 
@@ -137,7 +152,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
             self.train_metrics.update('loss', loss.item())
             self.train_metrics.update('rec_loss', rec_loss.item())
             self.train_metrics.update('kl_loss', kl_loss.item())
-            # self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
+            self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
             self.train_metrics.update('least_act_loss', least_action_loss.item())
             self.train_metrics.update('smoothness_loss', smoothness_loss.item())
 
@@ -146,7 +161,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
                 self.logger.info(f"Train Epoch: {epoch} [{batch_idx}/{len(self.data_loader)}] "
                                  f"Loss: {loss.item():.6f} Rec Loss: {rec_loss.item():.6f} "
                                  f"KL Loss: {kl_loss.item():.6f} "
-                                #  f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
+                                 f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
                                  f"Least Action Loss: {least_action_loss.item():.6f} "
                                  f"Smoothness Loss: {smoothness_loss.item():.6f}")
 
@@ -156,6 +171,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
         wandb.log({f'train/{key}': value for key, value in log.items()})
         wandb.log({'train/lr': self.optimizer.param_groups[0]['lr']})
         wandb.log({'train/epoch': epoch})
+        wandb.log({'train/annealing_weight': annealing_weight})
 
         # Validation
         if self.do_validation:
@@ -194,13 +210,13 @@ class PhysVAETrainerSMPL(BaseTrainer):
                     
                 data = data.to(self.device)
 
-                z_phy_stat, z_aux_stat, x = self.model(data, const = input_const)
+                z_phy_stat, z_aux_stat, x = self.model(data, hard_z=False, const = input_const)
+                # z_phy_stat, z_aux_stat, x = self.model(data, hard_z=True, const = input_const)
 
                 rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x)
 
                 # Update metrics 
                 self.valid_metrics.update('rec_loss', rec_loss.item())
-                # self.valid_metrics.update('rec_loss', rec_loss.item())
                 self.valid_metrics.update('kl_loss', kl_loss.item())
 
         # Log the validation metrics
@@ -225,6 +241,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
         KL_z_phy = kldiv_normal_normal(z_phy_stat['mean'], z_phy_stat['lnvar'],
             prior_z_phy_stat['mean'], prior_z_phy_stat['lnvar']
             ) if not self.no_phy else torch.zeros(1, device=self.device)
+        # KL_z_phy = torch.zeros(1, device=self.device)
         
         if pretrain:
             KL_z_aux = torch.zeros(1, device=self.device)
@@ -235,6 +252,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
                 ) if self.config['arch']['phys_vae']['dim_z_aux'] > 0 else torch.zeros(1, device=self.device)
         
         kl_loss = (KL_z_phy + KL_z_aux).mean()
+        # kl_loss = torch.zeros(1, device=self.device)
 
         return rec_loss, kl_loss
     
@@ -280,7 +298,8 @@ class PhysVAETrainerSMPL(BaseTrainer):
         """
         #NOTE TODO it can also be ridge regression loss, to be experimented
         if not self.no_phy:
-            return torch.sum((x_PB - x_P).pow(2), dim=1).mean()
+            # return torch.sum((x_PB - x_P).pow(2), dim=1).mean()
+            return mse_loss(x_PB, x_P)
         else:
             return torch.zeros(1, device=self.device)
     
@@ -328,7 +347,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
         weight = rec_loss_mag / max(reg_loss_mag, 1e-6)
         return weight.detach()/10 # One order of magnitude smaller
     
-    def _linear_annealing_epoch(epoch, warmup_epochs=30):
+    def _linear_annealing_epoch(self, epoch, warmup_epochs=30):
         """
         Linear annealing of the loss weight based on the epoch number.
 
@@ -341,9 +360,9 @@ class PhysVAETrainerSMPL(BaseTrainer):
         else:
             return 1.0
         
-    def _cylindrical_annealing_epoch(epoch: int,
-                                cycle_length: int = 25,
-                                ramp_frac: float = 0.6) -> float:
+    def _cylindrical_annealing_epoch(self, epoch: int,
+                                cycle_length: int = 10,
+                                ramp_frac: float = 0.5) -> float:
         """
         Compute a cylindrical (cyclical + flat‐top) annealing factor per‐epoch.
 

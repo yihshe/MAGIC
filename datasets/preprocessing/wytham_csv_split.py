@@ -18,7 +18,7 @@ S2_BANDS = ['B02_BLUE', 'B03_GREEN', 'B04_RED', 'B05_RE1', 'B06_RE2',
 ATTRS = ['sample_id', 'date']
 
 BASE_DIR = "/maps/ys611/MAGIC/data/raw/wytham"
-SAVE_DIR = os.path.join("/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period")
+SAVE_DIR = os.path.join("/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period_subset")
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 SAVE_DIR_TRAIN = os.path.join(SAVE_DIR, "train.csv")
@@ -30,13 +30,14 @@ CSV_S2_2018_DIR = os.path.join(BASE_DIR, "csv_preprocessed_data", "rasters_senti
 CSV_S2_FRM4VEG_DIR = os.path.join(BASE_DIR, "csv_preprocessed_data", "frm4veg_sentinel2_2018.csv")
 
 # TODO add the S2 spectra from frm4veg sample sites and standardize the data
-SAMPLE_RATIO = 0.5
+SAMPLE_RATIO = 0.1 #0.5 for insitu_period
 SPLIT_RATIO = 0.2
 
 csv_s2_2018 = pd.read_csv(CSV_S2_2018_DIR)
 
 # Filter the data to only include the dates of interest
-dates = ['2018.06.26', '2018.06.29', '2018.07.06', '2018.07.11']
+# dates = ['2018.06.26', '2018.06.29', '2018.07.06', '2018.07.11']
+dates = ['2018.06.29', '2018.07.06']
 csv_s2_2018 = csv_s2_2018[csv_s2_2018["date"].isin(dates)]
 
 sample_ids = csv_s2_2018["sample_id"].unique()

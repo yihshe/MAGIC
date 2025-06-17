@@ -22,7 +22,8 @@ CSV_PATH2 = os.path.join(
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3/0406_105747/model_best_testset_analyzer.csv')
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3_prior_std0.1/0406_114131/model_best_testset_analyzer.csv')
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.1/0407_102159/model_best_testset_analyzer.csv')
-    BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.2/0407_120629/model_best_testset_analyzer.csv')
+    # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/0610_223805/checkpoint-epoch100_testset_analyzer.csv')
+    BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/0611_173302/checkpoint-epoch100_testset_analyzer.csv')
 
 # CSV_PATH3 = os.path.join(
 #     BASE_PATH, 'NNRegressor/0124_160519/model_best_testset_analyzer_real.csv')
@@ -40,7 +41,8 @@ SAVE_PATH = os.path.join(BASE_PATH,
                         # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3/0406_105747/plots')
                         # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3_prior_std0.1/0406_114131/plots')
                         # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.1/0407_102159/plots')
-                        'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.2/0407_120629/plots')
+                        # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/0610_223805/plots')
+                        'rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/0611_173302/plots')
 
 
 
@@ -52,8 +54,8 @@ S2_names = {
     'B06_RE2': 'B6', 'B07_RE3': 'B7', 'B08_NIR1': 'B8', 'B8A_NIR2': 'B8a',
     'B09_WV': 'B9', 'B11_SWI1': 'B11', 'B12_SWI2': 'B12'
 }
-# rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
-rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras_exp.json'))
+
+rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
 
 ATTRS = list(rtm_paras.keys())
 # for each attr in ATTRS, create a LaTex variable name like $Z_{\mathrm{attr}}$
@@ -74,8 +76,8 @@ df1 = pd.read_csv(CSV_PATH1)
 df2 = pd.read_csv(CSV_PATH2)
 # df3 = pd.read_csv(CSV_PATH3)
 # retrieve the target and output bands to original scale
-MEAN = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/train_x_mean.npy')
-SCALE = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/train_x_scale.npy')
+MEAN = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period_subset/train_x_mean.npy')
+SCALE = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period_subset/train_x_scale.npy')
 for x in ['target', 'output']:
     df1[[f'{x}_{band}' for band in S2_BANDS]] = df1[[f'{x}_{band}' for band in S2_BANDS]]*SCALE + MEAN
     df2[[f'{x}_{band}' for band in S2_BANDS]] = df2[[f'{x}_{band}' for band in S2_BANDS]]*SCALE + MEAN
@@ -169,7 +171,7 @@ for i, attr in enumerate(ATTRS):
 axs[-1, -1].axis('off')
 plt.tight_layout()
 plt.savefig(os.path.join(
-    SAVE_PATH, 'histogram_realset_vars_ae_rtm_corr_v_wocorr.png'), dpi=300)
+    SAVE_PATH, 'histogram_realset_vars_ae_rtm_corr.png'), dpi=300)
 # plt.savefig(os.path.join(
 #     SAVE_PATH, 'histogram_realset_vars_NN.png'), dpi=300)
 
