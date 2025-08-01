@@ -23,7 +23,7 @@ CSV_PATH2 = os.path.join(
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3_prior_std0.1/0406_114131/model_best_testset_analyzer.csv')
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.1/0407_102159/model_best_testset_analyzer.csv')
     # BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/0610_223805/checkpoint-epoch100_testset_analyzer.csv')
-    BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/0611_173302/checkpoint-epoch100_testset_analyzer.csv')
+    BASE_PATH, 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_SMPL_COMPARE/0617_154805_std0.1_kl0.1_otherweights0.1/checkpoint-epoch40_testset_analyzer.csv')
 
 # CSV_PATH3 = os.path.join(
 #     BASE_PATH, 'NNRegressor/0124_160519/model_best_testset_analyzer_real.csv')
@@ -42,7 +42,7 @@ SAVE_PATH = os.path.join(BASE_PATH,
                         # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_3_prior_std0.1/0406_114131/plots')
                         # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_LAIu_fixed1.5_prior_std0.1/0407_102159/plots')
                         # 'rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/0610_223805/plots')
-                        'rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/0611_173302/plots')
+                        'rtm/models/PHYS_VAE_RTM_C_WYTHAM_KL_SMPL_COMPARE/0617_154805_std0.1_kl0.1_otherweights0.1/plots')
 
 
 
@@ -118,7 +118,7 @@ def r_square(y, y_hat):
 
 # %%
 """
-Histogram of the latent variables of both models (AE_RTM and AE_RTM_corr)
+ablation: Histogram of the latent variables of both models (AE_RTM and AE_RTM_corr)
 N2, NNRegressor and AE_RTM_corr
 """
 # Histogram of the latent variables of both models (AE_RTM and AE_RTM_corr)
@@ -557,7 +557,7 @@ plt.show()
 
 # %%
 """
-Scatter plot of input and reconstruction bands
+ablation: Scatter plot of input and reconstruction bands
 Plot for VanillaAE, AE_RTM, AE_RTM_corr NOTE neurips full plots
 """
 # Scatter plot of the input and reconstructed bands

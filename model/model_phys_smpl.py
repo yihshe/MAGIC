@@ -39,15 +39,16 @@ class Encoders(nn.Module):
 
         if dim_z_aux > 0:
             # hidlayers_aux_enc = config['arch']['phys_vae']['hidlayers_aux_enc'] #[64, 32] TODO change the config too
-            hidlayers_z_aux = config['arch']['phys_vae']['hidlayers_z_aux'] #[64, 32]
+            hidlayers_z_aux = config['arch']['phys_vae']['hidlayers_z_aux'] # NOTE currently [32], could be changed to [32,16] later on. 
             self.func_z_aux_mean = MLP([num_units_feat,]+hidlayers_z_aux+[dim_z_aux,], activation)
             self.func_z_aux_lnvar = MLP([num_units_feat,]+hidlayers_z_aux+[dim_z_aux,], activation)
 
         if not no_phy:
-            hidlayers_z_phy = config['arch']['phys_vae']['hidlayers_z_phy'] #[64, 32]
-            # self.func_unmixer_coeff = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[in_channels,], activation), nn.Tanh())
+            hidlayers_z_phy = config['arch']['phys_vae']['hidlayers_z_phy'] # NOTE currently [32], could be changed to [32,16] later on. 
             self.func_z_phy_mean = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation), nn.Softplus()) #NOTE Softplus is used to ensure positive values
             self.func_z_phy_lnvar = MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation) 
+
+            self.func_unmixer_coeff = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[in_channels,], activation), nn.Tanh())
 
 class Decoders(nn.Module):
     def __init__(self, config:dict):
@@ -66,10 +67,8 @@ class Decoders(nn.Module):
         if not no_phy:
             if dim_z_aux >= 0:
                 # phy (and aux) -> x
-                # TODO rename func_aux_expand to func_aux_res
-                # self.func_aux_expand = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
-
-                self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
+                self.func_aux_expand = MLP([dim_z_phy+dim_z_aux, 32, 64, in_channels], activation)#NOTE to experiment with simplification
+                # self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
                 self.func_correction = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)#NOTE (optional) additional non-linear correction optional           
 
         else:
@@ -240,11 +239,12 @@ class PHYS_VAE_SMPL(nn.Module):
             y = self.physics_model(z_phy, const=const) # (n, in_channels)
             x_P = y
             if self.dim_z_aux >= 0:
-                # expanded = self.dec.func_aux_expand(torch.cat([z_phy, z_aux], dim=1))
-                correction = self.dec.func_aux_expand(z_aux) # (n, in_channels)
-                x_PB = x_P + correction
+                #NOTE ablation study in this part later on
+                expanded = self.dec.func_aux_expand(torch.cat([z_phy, z_aux], dim=1)) 
                 # expanded = self.dec.func_aux_dec(z_aux) # (n, in_channels)
-                # x_PB = self.dec.func_correction(torch.cat([x_P, expanded], dim=1))
+                x_PB = self.dec.func_correction(torch.cat([x_P, expanded], dim=1))
+                # correction = self.dec.func_aux_dec(z_aux) # (n, in_channels)
+                # x_PB = x_P + correction
             else:
                 x_PB = x_P.clone() # No correction if no auxiliary variables (dim_z_aux = -1)
         else:
@@ -277,17 +277,20 @@ class PHYS_VAE_SMPL(nn.Module):
 
         # infer z_phy
         if not self.no_phy:
-            # coeff = self.enc.func_unmixer_coeff(feature_aux) # (n,11) for RTM, (n,36) for Mogi
-            # unmixed = x_ * coeff # element-wise weighting for 1D data
-            # feature_phy = self.enc.func_feat(unmixed)
-            feature_phy = feature_aux
+            # NOTE: added the unmixing step
+            coeff = self.enc.func_unmixer_coeff(feature_aux) # (n,11) for RTM, (n,36) for Mogi
+            unmixed = x_ * coeff # element-wise weighting for 1D data
+            feature_phy = self.enc.func_feat(unmixed)
+
+            # feature_phy = feature_aux
             z_phy_stat = {'mean': self.enc.func_z_phy_mean(feature_phy), 'lnvar': self.enc.func_z_phy_lnvar(feature_phy)}
         else:
             # unmixed = torch.zeros(n, self.in_channels, device=device)
             z_phy_stat = {'mean':torch.empty(n, 0, device=device), 'lnvar':torch.empty(n, 0, device=device)}
 
-        # return z_phy_stat, z_aux_stat, unmixed
-        return z_phy_stat, z_aux_stat
+        return z_phy_stat, z_aux_stat, unmixed
+
+        # return z_phy_stat, z_aux_stat
 
 
     def draw(self, z_phy_stat:dict, z_aux_stat:dict, hard_z:bool=False):
@@ -308,7 +311,7 @@ class PHYS_VAE_SMPL(nn.Module):
     def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False,
                 inference:bool=False, const:dict=None):
         # z_phy_stat, z_aux_stat, unmixed, = self.encode(x)
-        z_phy_stat, z_aux_stat = self.encode(x)
+        z_phy_stat, z_aux_stat, _ = self.encode(x)
 
         if not reconstruct:
             return z_phy_stat, z_aux_stat

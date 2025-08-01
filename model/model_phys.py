@@ -211,7 +211,7 @@ class PHYS_VAE(nn.Module):
 
         prior_z_phy_mean = torch.full((n, self.dim_z_phy), 0.5, device=device)  # mean = 0.5
         prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.1, device=device)   # std = 0.1
-        # prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.2, device=device)
+        # prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.866, device=device)
 
         prior_z_phy_stat = {'mean': prior_z_phy_mean, 'lnvar': 2.0*torch.log(prior_z_phy_std)}#TODO check lnvar and reparameterization
         prior_z_aux2_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux2), device=device),

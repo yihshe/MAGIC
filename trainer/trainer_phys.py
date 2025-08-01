@@ -131,13 +131,18 @@ class PhysVAETrainer(BaseTrainer):
                 #     + self.least_action_loss_weight * least_action_loss
                 
                 # NOTE for experiments before 2025.04.06, + self.kl_loss_weight * kl_loss * x_var.detach() \
+                # loss = rec_loss \
+                #     + self._loss_weight(rec_loss, kl_loss) * kl_loss \
+                #     + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
+                #     + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
+                #     + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
+                #     + 0.01 * smoothness_loss
                 loss = rec_loss \
-                    + self._loss_weight(rec_loss, kl_loss) * kl_loss \
+                    + self.kl_loss_weight * kl_loss * x_var.detach() \
                     + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
                     + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
                     + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
                     + 0.01 * smoothness_loss
-                    # + self._loss_weight(rec_loss, smoothness_loss) * smoothness_loss
                 
             # Backpropagation
             loss.backward()

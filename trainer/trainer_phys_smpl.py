@@ -92,17 +92,20 @@ class PhysVAETrainerSMPL(BaseTrainer):
             self.optimizer.zero_grad()
 
             # Encode step: Infer latent variables
-            z_phy_stat, z_aux_stat = self.model.encode(data)
+            z_phy_stat, z_aux_stat, unmixed = self.model.encode(data)
 
             # Draw step: Sample latent variables
             z_phy, z_aux = self.model.draw(z_phy_stat, z_aux_stat, hard_z=False)
             # z_phy, z_aux = self.model.draw(z_phy_stat, z_aux_stat, hard_z=True)
 
             # Decode step: Reconstruct outputs
-            x_PB, x_P, _ = self.model.decode(z_phy, z_aux, full=True, const = input_const)
+            x_PB, x_P, y = self.model.decode(z_phy, z_aux, full=True, const = input_const)
 
             # ELBO loss
             rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
+
+            # Unmixing regularization (R_{unmix})
+            unmix_loss = self._unmixing_loss(unmixed, y)
 
             # Synthetic data regularization (R_{DA,2})
             synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
@@ -133,11 +136,28 @@ class PhysVAETrainerSMPL(BaseTrainer):
                 #     + annealing_weight * kl_loss \
                 #     + 0.1 * least_action_loss \
                 #     + 0.01 * smoothness_loss
+
+                # loss = rec_loss\
+                #       + 0.001 * kl_loss \
+                #       + self.least_action_loss_weight * least_action_loss \
+                #       + self.synthetic_data_loss_weight * synthetic_data_loss 
+
+
+                # NOTE loss to experiment on the full version of PhysVAE
+                # loss = rec_loss \
+                #     + self._loss_weight(rec_loss, kl_loss) * kl_loss \
+                #     + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
+                #     + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
+                #     + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
+                #     + 0.01 * smoothness_loss
+                
                 loss = rec_loss \
-                    + self._loss_weight(rec_loss, kl_loss) * kl_loss \
+                    + self.kl_loss_weight * kl_loss * torch.exp(-9) \
+                    + self._loss_weight(rec_loss, unmix_loss) * unmix_loss \
                     + self._loss_weight(rec_loss, synthetic_data_loss) * synthetic_data_loss \
                     + self._loss_weight(rec_loss, least_action_loss) * least_action_loss \
                     + 0.01 * smoothness_loss
+                
             # Backpropagation
             loss.backward()
 
@@ -152,6 +172,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
             self.train_metrics.update('loss', loss.item())
             self.train_metrics.update('rec_loss', rec_loss.item())
             self.train_metrics.update('kl_loss', kl_loss.item())
+            self.train_metrics.update('unmix_loss', unmix_loss.item())#NOTE ablation on unmix_loss first
             self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
             self.train_metrics.update('least_act_loss', least_action_loss.item())
             self.train_metrics.update('smoothness_loss', smoothness_loss.item())
@@ -161,6 +182,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
                 self.logger.info(f"Train Epoch: {epoch} [{batch_idx}/{len(self.data_loader)}] "
                                  f"Loss: {loss.item():.6f} Rec Loss: {rec_loss.item():.6f} "
                                  f"KL Loss: {kl_loss.item():.6f} "
+                                 f"Unmix Loss: {unmix_loss.item():.6f} "#NOTE ablation on unmix_loss first
                                  f"Synthetic Data Loss: {synthetic_data_loss.item():.6f} "
                                  f"Least Action Loss: {least_action_loss.item():.6f} "
                                  f"Smoothness Loss: {smoothness_loss.item():.6f}")
@@ -171,7 +193,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
         wandb.log({f'train/{key}': value for key, value in log.items()})
         wandb.log({'train/lr': self.optimizer.param_groups[0]['lr']})
         wandb.log({'train/epoch': epoch})
-        wandb.log({'train/annealing_weight': annealing_weight})
+        # wandb.log({'train/annealing_weight': annealing_weight})
 
         # Validation
         if self.do_validation:
@@ -235,7 +257,8 @@ class PhysVAETrainerSMPL(BaseTrainer):
         :return: Reconstruction loss and KL divergence loss.
         """
         n = data.shape[0]
-        rec_loss = mse_loss(x, data)
+        # rec_loss = mse_loss(x, data)#NOTE this is MSE can be experimented at the end, but for now keep the same implementation as PhysVAE
+        rec_loss = torch.sum((x-data).pow(2), dim=1).mean()
         prior_z_phy_stat, prior_z_aux_stat = self.model.priors(n, self.device) #TODO
 
         KL_z_phy = kldiv_normal_normal(z_phy_stat['mean'], z_phy_stat['lnvar'],
@@ -296,10 +319,10 @@ class PhysVAETrainerSMPL(BaseTrainer):
         :param x_P: Predicted physics-only signal.
         :return: Least action loss.
         """
-        #NOTE TODO it can also be ridge regression loss, to be experimented
+        #NOTE TODO it can also be ridge regression loss, to be experimented at the end
         if not self.no_phy:
-            # return torch.sum((x_PB - x_P).pow(2), dim=1).mean()
-            return mse_loss(x_PB, x_P)
+            return torch.sum((x_PB - x_P).pow(2), dim=1).mean()
+            # return mse_loss(x_PB, x_P)#NOTE this is MSE can be experimented at the end
         else:
             return torch.zeros(1, device=self.device)
     
