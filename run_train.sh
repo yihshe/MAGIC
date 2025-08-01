@@ -22,5 +22,8 @@ python3 train.py --config configs/AE_RTM_A.json
 # # Train AE_Mogi_C (encoder being replaced with Mogi + correction layer)
 # python3 train.py --config configs/AE_Mogi_C.json
 
+# Train AE_DPM_A (classical autoencoder)
+python3 train.py --config configs/AE_DPM_A.json
+
 
 

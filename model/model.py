@@ -7,6 +7,7 @@ import json
 from base import BaseModel
 from rtm_torch.rtm import RTM
 from mogi.mogi import Mogi
+from dpm.dpm import DPM
 from model import SCRIPT_DIR, PARENT_DIR
 
 
@@ -301,3 +302,72 @@ class AE_Mogi_corr(AE_Mogi):
         x2 = self.decode(x1)
         x3 = self.correct(x2)
         return x0, x1, x2, x3
+
+class AE_DPM(BaseModel):
+    """
+    Vanilla AutoEncoder (AE) with Dynamic Phenology Model (DPM) as the decoder
+    input -> encoder (learnable) -> decoder (DPM) -> output
+    """
+
+    def __init__(self, input_dim, hidden_dim, dpm_paras, standardization):
+        super().__init__()
+        self.input_dim = input_dim  # 36
+        self.hidden_dim = hidden_dim  # 4
+        # The encoder is learnable neural networks
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 16),
+            nn.ReLU(),
+            nn.Linear(16, hidden_dim),
+            nn.Sigmoid(),
+        )
+        # TODO The decoder is the Dynamic Phenology Model (DPM) 
+        self.decoder = DPM()
+
+        self.dpm_paras = json.load(open(os.path.join(PARENT_DIR, dpm_paras)))
+        assert hidden_dim == len(
+            self.mogi_paras), "hidden_dim must be equal to the number of Mogi parameters"
+        # Mean and scale for standardization of model input
+        self.device = torch.device(
+            'cuda' if torch.cuda.is_available() else 'cpu')
+        self.x_mean = torch.tensor(np.load(
+            os.path.join(PARENT_DIR, standardization['x_mean'])
+            )).float().unsqueeze(0).to(self.device)
+        self.x_scale = torch.tensor(np.load(
+            os.path.join(PARENT_DIR,standardization['x_scale'])
+            )).float().unsqueeze(0).to(self.device)
+
+    #  define encode function to further process the output of encoder
+    def encode(self, x):
+        x = self.encoder(x)
+        return x
+
+    def transform(self, x):
+        """
+        Transform the output of encoder to the physical parameters
+        """
+        para_dict = {}
+        for i, para_name in enumerate(self.mogi_paras.keys()):
+            min = self.mogi_paras[para_name]['min']
+            max = self.mogi_paras[para_name]['max']
+            # TODO depending the DPM implementation, the output may need to be scaled
+            para_dict[para_name] = x[:, i]*(max-min)+min
+
+        return para_dict
+
+    #  define decode function to further process the output of decoder
+    def decode(self, para_dict):
+        # TODO depending the DPM implementation, the input need to be changed
+        output = self.decoder.run(**para_dict)
+        # scaling the output with mean and scale helps the model to learn better
+        return (output-self.x_mean)/self.x_scale
+
+    def forward(self, x):
+        x0 = self.encode(x)
+        x1 = self.transform(x0)
+        x2 = self.decode(x1)
+        # return all the outputs for visualization and analysis
+        return x0, x1, x2
