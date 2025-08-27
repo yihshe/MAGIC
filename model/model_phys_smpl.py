@@ -325,3 +325,13 @@ class PHYS_VAE_SMPL(nn.Module):
             z_phy, z_aux = self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z)
             x_PB, x_P, _ = self.decode(z_phy, z_aux, full=True, const=const)
             return z_phy, z_aux, x_PB, x_P
+        
+# NOTE:
+"""
+questions: 1) range of gate , should be sigmoid? 2) X_P as input, the gradient flow. or, if X_P is diffferentiable, then it already contains z_phy?
+3) create a new scripts keep the original adapted version for ablation study
+4) about annealing schedule. 5) about learning rate for pretrain epoch and the normal epochs. 
+6) MSE loss definition for reconstruction, channel-wise or overall, double check
+7) how does 3e-4 works with cosine scheduler, should I choose Adam optimiser then? Keep things simple if possible.
+about trainer.py: nail down the number of prepare epochs, scheduler of lr etc. Then prepare all data (also the old RTM datta and then run the job)
+"""
