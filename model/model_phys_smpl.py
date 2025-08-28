@@ -32,23 +32,25 @@ class Encoders(nn.Module):
         no_phy = config['arch']['phys_vae']['no_phy']
         dim_z_aux = config['arch']['phys_vae']['dim_z_aux']#2
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy']#7 for RTM, 4 for Mogi
-        activation = config['arch']['phys_vae']['activation'] #same as galaxy example for gaussian sampling
+        activation = config['arch']['phys_vae']['activation'] # e.g., 'elu'
         num_units_feat = config['arch']['phys_vae']['num_units_feat']#64
         
         self.func_feat = FeatureExtractor(config)
 
         if dim_z_aux > 0:
-            # hidlayers_aux_enc = config['arch']['phys_vae']['hidlayers_aux_enc'] #[64, 32] TODO change the config too
-            hidlayers_z_aux = config['arch']['phys_vae']['hidlayers_z_aux'] # NOTE currently [32], could be changed to [32,16] later on. 
+            hidlayers_z_aux = config['arch']['phys_vae']['hidlayers_z_aux']
             self.func_z_aux_mean = MLP([num_units_feat,]+hidlayers_z_aux+[dim_z_aux,], activation)
             self.func_z_aux_lnvar = MLP([num_units_feat,]+hidlayers_z_aux+[dim_z_aux,], activation)
 
         if not no_phy:
-            hidlayers_z_phy = config['arch']['phys_vae']['hidlayers_z_phy'] # NOTE currently [32], could be changed to [32,16] later on. 
-            self.func_z_phy_mean = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation), nn.Softplus()) #NOTE Softplus is used to ensure positive values
-            self.func_z_phy_lnvar = MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation) 
+            hidlayers_z_phy = config['arch']['phys_vae']['hidlayers_z_phy']
+            # CHANGED: remove Softplus on mean; final layer is linear (u-space)
+            # ORIGINAL: self.func_z_phy_mean = nn.Sequential(MLP([...],[dim_z_phy]), nn.Softplus())
+            self.func_z_phy_mean = MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation)  # NEW (u-mean)
+            self.func_z_phy_lnvar = MLP([num_units_feat,]+hidlayers_z_phy+[dim_z_phy,], activation) # u-lnvar
 
-            self.func_unmixer_coeff = nn.Sequential(MLP([num_units_feat,]+hidlayers_z_phy+[in_channels,], activation), nn.Tanh())
+            # REMOVED: unmixing path; keep ablation-ready by simply not creating it now.
+            # ORIGINAL: self.func_unmixer_coeff = nn.Sequential(MLP([...,[in_channels]]), nn.Tanh())
 
 class Decoders(nn.Module):
     def __init__(self, config:dict):
@@ -59,37 +61,44 @@ class Decoders(nn.Module):
         dim_z_phy = config['arch']['phys_vae']['dim_z_phy'] #7 for RTM, 4 for Mogi
         activation = config['arch']['phys_vae']['activation'] #elu 
         no_phy = config['arch']['phys_vae']['no_phy']
-        # x_lnvar = config['trainer']['phys_vae']['x_lnvar'] # default -9, does not make much sense
-        
-        # self.register_buffer('param_x_lnvar', torch.ones(1)*x_lnvar)
 
-        # NOTE variable names can be simplified.
         if not no_phy:
             if dim_z_aux >= 0:
-                # phy (and aux) -> x
-                self.func_aux_expand = MLP([dim_z_phy+dim_z_aux, 32, 64, in_channels], activation)#NOTE to experiment with simplification
-                # self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
-                self.func_correction = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)#NOTE (optional) additional non-linear correction optional           
+                # phy+aux context -> expanded features in x-space
+                self.func_aux_expand = MLP([dim_z_phy+dim_z_aux, 32, 64, in_channels], activation)
 
+                # CHANGED: residual head (corr) + gate
+                self.func_correction = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)
+                self.func_gate = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)
+                # NEW: init last linear bias to ~ -4 so sigmoid ~ 0 at start
+                try:
+                    last_linear = None
+                    for m in reversed(list(self.func_gate.modules())):
+                        if isinstance(m, nn.Linear):
+                            last_linear = m
+                            break
+                    if last_linear is not None and last_linear.bias is not None:
+                        nn.init.constant_(last_linear.bias, -4.0)
+                except Exception:
+                    pass
         else:
             # no phy
-            self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation) #TODO decide the decoding dimension, whether adding 16 dimension or not
+            self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
 
 class FeatureExtractor(nn.Module):
     def __init__(self, config:dict):
         super(FeatureExtractor, self).__init__()
 
         in_channels = config['arch']['args']['input_dim']#11 for RTM, 36 for Mogi
-        hidlayers_feat = config['arch']['phys_vae']['hidlayers_feat']#[32,] NOTE change to 36 for Mogi to avoid information loss
+        hidlayers_feat = config['arch']['phys_vae']['hidlayers_feat']#[32,]
         num_units_feat = config['arch']['phys_vae']['num_units_feat']#64
         activation = config['arch']['phys_vae']['activation']#elu
     
         # Shared backbone for feature extraction
         self.func_feat = MLP([in_channels,]+hidlayers_feat+[num_units_feat,], activation)
 
-
     def forward(self, x:torch.Tensor):
-        return self.func_feat(x) #n*128 
+        return self.func_feat(x) # n x num_units_feat
 
 
 class Physics_RTM(nn.Module):
@@ -109,7 +118,7 @@ class Physics_RTM(nn.Module):
     
     def rescale(self, z_phy:torch.Tensor):
         """
-        Rescale the output of the encoder to the physical parameters in the original scale
+        Rescale z in (0,1) to physical parameters in original scales.
         """
         z_phy_rescaled = {}
         for i, para_name in enumerate(self.z_phy_ranges.keys()):
@@ -154,24 +163,22 @@ class Physics_Mogi(nn.Module):
     
     def rescale(self, z_phy:torch.Tensor):
         """
-        Rescale the output of the encoder to the physical parameters in the original scale
+        Rescale z in (0,1) to physical parameters in the original scale.
         """
         z_phy_rescaled = {}
         for i, para_name in enumerate(self.z_phy_ranges.keys()):
-            min = self.z_phy_ranges[para_name]['min']
-            max = self.z_phy_ranges[para_name]['max']
-            # if x shape is (batch, sequence, feature), then x[:,:,i] is the i-th feature
+            minv = self.z_phy_ranges[para_name]['min']
+            maxv = self.z_phy_ranges[para_name]['max']
             if len(z_phy.shape) == 3:
-                z_phy_rescaled[para_name] = z_phy[:, :, i]*(max-min)+min
+                z_phy_rescaled[para_name] = z_phy[:, :, i]*(maxv-minv)+minv
             else:
-                z_phy_rescaled[para_name] = z_phy[:, i]*(max-min)+min
+                z_phy_rescaled[para_name] = z_phy[:, i]*(maxv-minv)+minv
 
             if para_name in ['xcen', 'ycen', 'd']:
                 z_phy_rescaled[para_name] = z_phy_rescaled[para_name]*1000
 
         z_phy_rescaled['dV'] = z_phy_rescaled['dV'] * \
             torch.pow(10, torch.tensor(5)) - torch.pow(10, torch.tensor(7))
-
         
         return z_phy_rescaled
     
@@ -197,7 +204,6 @@ class PHYS_VAE_SMPL(nn.Module):
         self.enc = Encoders(config)
 
         # Physics
-        # self.physics_model = Physics(config) 
         self.physics_model = self.physics_init(config)
     
     def physics_init(self, config:dict):
@@ -209,129 +215,110 @@ class PHYS_VAE_SMPL(nn.Module):
             raise ValueError("Unknown model type")
 
     def priors(self, n:int, device:torch.device):
-        # prior_z_phy_mean = torch.cat([
-        #     torch.ones(n,1,device=device) * 0.5 * (0 + 1) for i in range(self.dim_z_phy)
-        # ], dim=1)
-        # prior_z_phy_std = torch.cat([
-        #     torch.ones(n,1,device=device) * max(1e-3, 0.866*(1 - 0)) for i in range(self.dim_z_phy)
-        # ], dim=1)
-
-        # NOTE KL term for z_phy can be removed later on
-        prior_z_phy_mean = torch.full((n, self.dim_z_phy), 0.5 * (0+1), device=device)  # mean = 0.5
-        prior_z_phy_std = torch.full((n, self.dim_z_phy), 0.866 * (1-0), device=device)   # std = 0.1
-
-        prior_z_phy_stat = {'mean': prior_z_phy_mean, 'lnvar': 2.0*torch.log(prior_z_phy_std)}
+        """
+        CHANGED: priors now in u-space for physics (standard normal),
+        auxiliaries remain standard normal as before.
+        """
+        prior_u_phy_stat = {'mean': torch.zeros(n, self.dim_z_phy, device=device),
+                            'lnvar': torch.zeros(n, self.dim_z_phy, device=device)}
         prior_z_aux_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux), device=device),
                             'lnvar': torch.zeros(n, max(0,self.dim_z_aux), device=device)}
-        
-        return prior_z_phy_stat, prior_z_aux_stat
-
+        return prior_u_phy_stat, prior_z_aux_stat
 
     def generate_physonly(self, z_phy:torch.Tensor, const:dict=None):
+        # here z_phy is in (0,1)
         y = self.physics_model(z_phy, const=const) # (n, in_channels) 
         return y
 
-
     def decode(self, z_phy:torch.Tensor, z_aux:torch.Tensor, full:bool=False, const:dict=None):
-        # NOTE this function can be simplified with more clear variable names. For now, it is kept similar to the original code.
+        """
+        CHANGED: explicit additive residual with gate.
+                 Inputs to corr & gate: concat([x_P, expanded]), where expanded depends on [z_phy, z_aux].
+        """
         if not self.no_phy:
-            # with physics
             y = self.physics_model(z_phy, const=const) # (n, in_channels)
             x_P = y
             if self.dim_z_aux >= 0:
-                #NOTE ablation study in this part later on
-                expanded = self.dec.func_aux_expand(torch.cat([z_phy, z_aux], dim=1)) 
-                # expanded = self.dec.func_aux_dec(z_aux) # (n, in_channels)
-                x_PB = self.dec.func_correction(torch.cat([x_P, expanded], dim=1))
-                # correction = self.dec.func_aux_dec(z_aux) # (n, in_channels)
-                # x_PB = x_P + correction
+                expanded = self.dec.func_aux_expand(torch.cat([z_phy.detach(), z_aux], dim=1))  # CHANGED: detach z_phy
+                corr_in = torch.cat([x_P, expanded], dim=1)
+                corr = self.dec.func_correction(corr_in)
+                gate = torch.sigmoid(self.dec.func_gate(corr_in))
+                x_PB = x_P + gate * corr  # CHANGED: additive, gated
             else:
-                x_PB = x_P.clone() # No correction if no auxiliary variables (dim_z_aux = -1)
+                x_PB = x_P.clone()
+                gate = torch.zeros_like(x_P)
         else:
-            # no physics 
-            y = torch.zeros(z_phy.shape[0], self.in_channels)
+            y = torch.zeros(z_phy.shape[0], self.in_channels, device=z_phy.device)
             if self.dim_z_aux >= 0:
                 x_PB = self.dec.func_aux_dec(z_aux) 
             else:
-               x_PB = torch.zeros(z_phy.shape[0], self.in_channels)
+               x_PB = torch.zeros(z_phy.shape[0], self.in_channels, device=z_phy.device)
             x_P = x_PB.clone()
+            gate = torch.zeros_like(x_PB)
 
         if full:
-            return x_PB, x_P, y
+            return x_PB, x_P, y, gate  # CHANGED: return gate for logging/penalty
         else:
             return x_PB
 
-
     def encode(self, x:torch.Tensor):
-        # x_ = x.view(-1, 3, 69, 69)
+        """
+        CHANGED: no unmixing — infer u_phy directly from shared features.
+        """
         x_ = x
         n = x_.shape[0]
         device = x_.device
 
+        feature = self.enc.func_feat(x_)
+
         # infer z_aux
-        feature_aux = self.enc.func_feat(x_)
         if self.dim_z_aux > 0:
-            z_aux_stat = {'mean':self.enc.func_z_aux_mean(feature_aux), 'lnvar':self.enc.func_z_aux_lnvar(feature_aux)}
+            z_aux_stat = {'mean': self.enc.func_z_aux_mean(feature),
+                          'lnvar': self.enc.func_z_aux_lnvar(feature)}
         else:
-            z_aux_stat = {'mean':torch.empty(n, 0, device=device), 'lnvar':torch.empty(n, 0, device=device)}
+            z_aux_stat = {'mean': torch.empty(n, 0, device=device),
+                          'lnvar': torch.empty(n, 0, device=device)}
 
-        # infer z_phy
+        # infer u_phy stats (stored in z_phy_stat for backward-compat)
         if not self.no_phy:
-            # NOTE: added the unmixing step
-            coeff = self.enc.func_unmixer_coeff(feature_aux) # (n,11) for RTM, (n,36) for Mogi
-            unmixed = x_ * coeff # element-wise weighting for 1D data
-            feature_phy = self.enc.func_feat(unmixed)
-
-            # feature_phy = feature_aux
-            z_phy_stat = {'mean': self.enc.func_z_phy_mean(feature_phy), 'lnvar': self.enc.func_z_phy_lnvar(feature_phy)}
+            z_phy_stat = {'mean': self.enc.func_z_phy_mean(feature),   # u-mean
+                          'lnvar': self.enc.func_z_phy_lnvar(feature)} # u-lnvar
         else:
-            # unmixed = torch.zeros(n, self.in_channels, device=device)
-            z_phy_stat = {'mean':torch.empty(n, 0, device=device), 'lnvar':torch.empty(n, 0, device=device)}
+            z_phy_stat = {'mean': torch.empty(n, 0, device=device),
+                          'lnvar': torch.empty(n, 0, device=device)}
 
-        return z_phy_stat, z_aux_stat, unmixed
-
-        # return z_phy_stat, z_aux_stat
-
+        return z_phy_stat, z_aux_stat
 
     def draw(self, z_phy_stat:dict, z_aux_stat:dict, hard_z:bool=False):
+        """
+        Sample in u-space, then squash to z in (0,1).
+        """
         if not hard_z:
-            z_phy = draw_normal(z_phy_stat['mean'], z_phy_stat['lnvar'])
+            u_phy = draw_normal(z_phy_stat['mean'], z_phy_stat['lnvar'])
             z_aux = draw_normal(z_aux_stat['mean'], z_aux_stat['lnvar'])
         else:
-            z_phy = z_phy_stat['mean'].clone()
+            u_phy = z_phy_stat['mean'].clone()
             z_aux = z_aux_stat['mean'].clone()
 
-        # cut infeasible regions
         if not self.no_phy:
-            z_phy = torch.clamp(z_phy, 0, 1)
+            z_phy = torch.sigmoid(u_phy)  # CHANGED: no clamping
+        else:
+            z_phy = torch.zeros(u_phy.shape[0], self.in_channels, device=u_phy.device)
 
         return z_phy, z_aux
 
-
     def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False,
                 inference:bool=False, const:dict=None):
-        # z_phy_stat, z_aux_stat, unmixed, = self.encode(x)
-        z_phy_stat, z_aux_stat, _ = self.encode(x)
+        # CHANGED: encode returns only two dicts now
+        z_phy_stat, z_aux_stat = self.encode(x)
 
         if not reconstruct:
             return z_phy_stat, z_aux_stat
         
         if not inference:
-            # draw & reconstruction
             x_mean = self.decode(*self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z), full=False, const=const)
-
             return z_phy_stat, z_aux_stat, x_mean
         else:
             z_phy, z_aux = self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z)
-            x_PB, x_P, _ = self.decode(z_phy, z_aux, full=True, const=const)
-            return z_phy, z_aux, x_PB, x_P
-        
-# NOTE:
-"""
-questions: 1) range of gate , should be sigmoid? 2) X_P as input, the gradient flow. or, if X_P is diffferentiable, then it already contains z_phy?
-3) create a new scripts keep the original adapted version for ablation study
-4) about annealing schedule. 5) about learning rate for pretrain epoch and the normal epochs. 
-6) MSE loss definition for reconstruction, channel-wise or overall, double check
-7) how does 3e-4 works with cosine scheduler, should I choose Adam optimiser then? Keep things simple if possible.
-about trainer.py: nail down the number of prepare epochs, scheduler of lr etc. Then prepare all data (also the old RTM datta and then run the job)
-"""
+            x_PB, x_P, _y, _gate = self.decode(z_phy, z_aux, full=True, const=const)
+            return z_phy, z_aux, x_PB, x_P  # keep 4-tuple for existing test code

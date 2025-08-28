@@ -30,13 +30,12 @@ def main(config):
         config['data_loader']['data_dir_valid'],
         batch_size=64,
         shuffle=True,
-        validation_split=0.0,  # Validation set is already separated
+        validation_split=0.0,
         num_workers=2,
         with_const=config['data_loader']['args']['with_const'] if 'with_const' in config['data_loader']['args'] else False
     )
 
     # Build model architecture and log 
-    # model = config.init_obj('arch', module_arch)
     model = PHYS_VAE_SMPL(config)
     logger.info(model)
 
@@ -53,8 +52,11 @@ def main(config):
     # Build optimizer and learning rate scheduler
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = config.init_obj('optimizer', torch.optim, trainable_params)
-    lr_scheduler = config.init_obj(
-        'lr_scheduler', torch.optim.lr_scheduler, optimizer)
+
+    # CHANGED: make scheduler optional
+    lr_scheduler = None
+    if 'lr_scheduler' in config:
+        lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
 
     # Initialize Phys-VAE Trainer
     trainer = PhysVAETrainerSMPL(
@@ -70,7 +72,6 @@ def main(config):
 
 
 if __name__ == '__main__':
-    # TODO add custom arguments
     args = argparse.ArgumentParser(description='PyTorch Template for Phys-VAE')
     args.add_argument('-c', '--config', default=None, type=str,
                       help='config file path (default: None)')
@@ -79,7 +80,6 @@ if __name__ == '__main__':
     args.add_argument('-d', '--device', default=None, type=str,
                       help='indices of GPUs to enable (default: all)')
 
-    # Custom options to modify configuration from default values in JSON file
     CustomArgs = collections.namedtuple('CustomArgs', 'flags type target')
     options = [
         CustomArgs(['--lr', '--learning_rate'],
@@ -89,7 +89,6 @@ if __name__ == '__main__':
     ]
     config = ConfigParser.from_args(args, options)
 
-    # Initialize WandB
     wandb.init(
         project="PhysVAE_SMPL_RTM",
         entity="yihshe",
@@ -101,3 +100,5 @@ if __name__ == '__main__':
     main(config)
 
     wandb.finish()
+
+# NOTE: consider CosineAnnealingLR or ReduceLROnPlateau; see config.

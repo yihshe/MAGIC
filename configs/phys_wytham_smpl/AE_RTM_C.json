@@ -46,7 +46,7 @@
     "optimizer": {
         "type": "Adam",
         "args": {
-            "lr": 0.001,
+            "lr": 0.0003,
             "weight_decay": 0.0001,
             "amsgrad": true
         }
@@ -54,20 +54,19 @@
     "loss": "mse_loss",
     "metrics": [],
     "lr_scheduler": {
-        "type": "StepLR",
+        "type": "CosineAnnealingLR",
         "args": {
-            "step_size": 50,
-            "gamma": 0.1
+            "T_max": 150
         }
     },
     "trainer": {
-        "epochs": 100,
+        "epochs": 150,
         "save_dir": "saved/rtm",
         "save_period": 10,
         "log_step": 5,
         "verbosity": 2,
-        "monitor": "min val_loss",
-        "early_stop": 10,
+        "monitor": "min val_rec_loss",
+        "early_stop": 20,
         "input_key": "spectrum",
         "input_const_keys": [
             "tto",
@@ -79,11 +78,10 @@
         "tensorboard": false,
         "wandb": true,
         "phys_vae": {
-            "epochs_pretrain": 0,
-            "balance_kld": 1,
-            "balance_unmix": 0.1,
-            "balance_lact": 0.1,
-            "balance_data_aug":0.1
+            "epochs_pretrain": 20, 
+            "kl_warmup_epochs": 50,
+            "balance_gate": 0.001, 
+            "balance_data_aug": 1.0  
         }
     }
 }
