@@ -31,9 +31,9 @@ import torch
 import numpy as np
 from scipy.interpolate import interp1d
 
-from rtm_torch.Resources.PROSAIL import call_model as mod
-from rtm_torch.Resources.Spec2Sensor.Spec2Sensor_core import Spec2Sensor
-from rtm_torch import APP_DIR
+from physics.rtm.Resources.PROSAIL import call_model as mod
+from physics.rtm.Resources.Spec2Sensor.Spec2Sensor_core import Spec2Sensor
+from physics.rtm import APP_DIR
 
 import warnings
 warnings.filterwarnings('ignore')  # ignore warnings, like ZeroDivision

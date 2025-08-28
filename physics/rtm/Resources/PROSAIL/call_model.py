@@ -31,11 +31,11 @@ import os
 import torch
 import numpy as np
 from scipy.stats import truncnorm
-import rtm_torch.Resources.PROSAIL.SAIL as SAIL_v
-import rtm_torch.Resources.PROSAIL.INFORM as INFORM_v
-import rtm_torch.Resources.PROSAIL.prospect as prospect_v
-from rtm_torch.Resources.PROSAIL.dataSpec import lambd
-from rtm_torch.Resources.Spec2Sensor.Spec2Sensor_core import Spec2Sensor
+import physics.rtm.Resources.PROSAIL.SAIL as SAIL_v
+import physics.rtm.Resources.PROSAIL.INFORM as INFORM_v
+import physics.rtm.Resources.PROSAIL.prospect as prospect_v
+from physics.rtm.Resources.PROSAIL.dataSpec import lambd
+from physics.rtm.Resources.Spec2Sensor.Spec2Sensor_core import Spec2Sensor
 import warnings
 import time
 import math

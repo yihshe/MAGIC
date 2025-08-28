@@ -28,8 +28,12 @@ class ConfigParser:
         exper_name = self.config['name']
         if run_id is None: # use timestamp as default run-id
             run_id = datetime.now().strftime(r'%m%d_%H%M%S')
-        self._save_dir = save_dir / 'models' / exper_name / run_id
-        self._log_dir = save_dir / 'log' / exper_name / run_id
+        
+        # NEW: Create unified experiment directory structure
+        # Old: save_dir/models/exper_name/run_id and save_dir/log/exper_name/run_id
+        # New: save_dir/exper_name/run_id/models and save_dir/exper_name/run_id/log
+        self._save_dir = save_dir / exper_name / run_id / 'models'
+        self._log_dir = save_dir / exper_name / run_id / 'log'
 
         # make directory for saving checkpoints and log.
         exist_ok = run_id == ''

@@ -9,7 +9,7 @@ from parse_config import ConfigParser
 import pandas as pd
 import numpy as np
 import json
-from rtm_torch.rtm import RTM
+from physics.rtm.rtm import RTM
 import os
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 

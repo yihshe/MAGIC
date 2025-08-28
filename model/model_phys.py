@@ -5,8 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import json
 from base import BaseModel
-from rtm_torch.rtm import RTM
-from mogi.mogi import Mogi
+from physics.rtm.rtm import RTM
+from physics.mogi.mogi import Mogi
 from model import SCRIPT_DIR, PARENT_DIR
 from utils import MLP, draw_normal
 

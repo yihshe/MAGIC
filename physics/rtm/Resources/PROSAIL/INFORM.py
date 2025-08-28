@@ -90,7 +90,7 @@ _________________________________________________________________________
 """
 
 import torch
-from rtm_torch.Resources.PROSAIL.dataSpec import *
+from physics.rtm.Resources.PROSAIL.dataSpec import *
 
 
 class INFORM:

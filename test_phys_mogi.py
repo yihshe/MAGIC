@@ -10,7 +10,7 @@ from model import PHYS_VAE  # TODO modify for Phys-VAE
 from parse_config import ConfigParser
 import pandas as pd
 import numpy as np
-# from rtm_torch.rtm import RTM
+# from physics.rtm.rtm import RTM
 
 import os
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))

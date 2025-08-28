@@ -4,8 +4,8 @@ import numpy as np
 import unittest
 
 import torch
-from rtm_numpy.rtm import RTM as RTM_np
-from rtm_torch.rtm import RTM as RTM_torch
+from physics.rtm_numpy.rtm import RTM as RTM_np
+from physics.rtm.rtm import RTM as RTM_torch
 import re
 import sys
 import os

@@ -47,11 +47,13 @@ MAGIC/
   │   ├── metric.py
   │   └── loss.py
   │
-  ├── mogi/ - PyTorch implementation of Mogi model
+  
   │
-  ├── rtm_numpy/ - NumPy implementation of RTM model
-  │
-  ├── rtm_torch/ - PyTorch implementation of RTM model
+  ├── physics/ - Forward physical models
+│   ├── rtm/ - PyTorch implementation of RTM model
+│   ├── mogi/ - PyTorch implementation of Mogi model
+│   ├── rtm_numpy/ - NumPy implementation of RTM model
+│   └── dpm/ - DPM model implementation
   │
   ├── pretrained/ - pretrained models for evaluation
   │

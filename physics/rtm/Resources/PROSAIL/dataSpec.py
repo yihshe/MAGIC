@@ -22,7 +22,7 @@ Remote Sensing of Environment, 34, 75-91. Article.
 '''
 import sys
 import numpy as np
-from rtm_torch.Resources.array2tensor import array2tensor
+from physics.rtm.Resources.array2tensor import array2tensor
 
 # Lambda:
 lambd = np.arange(400, 2501)

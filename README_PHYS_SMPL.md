@@ -34,6 +34,11 @@ The simplified PhysVAE framework provides a cleaner, more maintainable version o
 │   └── model_phys_smpl.py            # Simplified PhysVAE model implementation
 ├── trainer/
 │   └── trainer_phys_smpl.py          # Enhanced trainer with better monitoring
+├── physics/                          # Forward physical models
+│   ├── rtm/                          # PyTorch implementation of RTM model
+│   ├── mogi/                         # PyTorch implementation of Mogi model
+│   ├── rtm_numpy/                    # NumPy implementation of RTM model
+│   └── dpm/                          # DPM model implementation
 ├── train_phys_smpl.py                # Training script
 ├── test_phys_rtm_smpl.py             # Testing script
 └── run_train_phys_smpl.sh            # Training execution script
@@ -66,13 +71,13 @@ bash run_train_phys_smpl.sh
 ```bash
 # Test on validation set
 python test_phys_rtm_smpl.py \
-    --config saved/rtm/models/YOUR_MODEL/config.json \
-    --resume saved/rtm/models/YOUR_MODEL/checkpoint-epochX.pth
+    --config saved/rtm/PHYS_VAE_RTM_C_WYTHAM_SMPL/MMDD_HHMMSS/models/config.json \
+    --resume saved/rtm/PHYS_VAE_RTM_C_WYTHAM_SMPL/MMDD_HHMMSS/models/checkpoint-epochX.pth
 
 # Test on in-situ data
 python test_phys_rtm_smpl.py \
-    --config saved/rtm/models/YOUR_MODEL/config.json \
-    --resume saved/rtm/models/YOUR_MODEL/checkpoint-epochX.pth \
+    --config saved/rtm/PHYS_VAE_RTM_C_WYTHAM_SMPL/MMDD_HHMMSS/models/config.json \
+    --resume saved/rtm/PHYS_VAE_RTM_C_WYTHAM_SMPL/MMDD_HHMMSS/models/checkpoint-epochX.pth \
     --insitu
 ```
 
@@ -109,6 +114,42 @@ The framework provides comprehensive monitoring through:
 - **Validation Metrics**: Reconstruction and KL losses
 - **Physics Parameter Statistics**: Per-dimension u-space statistics
 - **Gradient Monitoring**: Gradient clipping and stabilization
+
+## Directory Structure
+
+### New Saving Structure
+
+The framework now uses a unified directory structure for experiments:
+
+```
+saved/
+├── rtm/
+│   └── EXPERIMENT_NAME/
+│       └── MMDD_HHMMSS/
+│           ├── models/           # Model checkpoints and config
+│           │   ├── checkpoint-epochX.pth
+│           │   ├── config.json
+│           │   └── plots/
+│           └── log/              # Training logs and tensorboard
+│               ├── events.out.tfevents
+│               └── train.log
+└── mogi/
+    └── EXPERIMENT_NAME/
+        └── MMDD_HHMMSS/
+            ├── models/
+            └── log/
+```
+
+This structure makes it easier to find all files related to a specific experiment run.
+
+### Physics Models
+
+All forward physical models are now organized under the `physics/` directory:
+
+- **`physics/rtm/`**: PyTorch implementation of RTM radiative transfer model
+- **`physics/mogi/`**: PyTorch implementation of Mogi deformation model
+- **`physics/rtm_numpy/`**: NumPy implementation of RTM model
+- **`physics/dpm/`**: DPM model implementation
 
 ## Key Parameters
 

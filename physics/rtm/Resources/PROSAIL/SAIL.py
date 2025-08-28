@@ -16,8 +16,8 @@ Remote Sensing of Environment, 16, 125-141. Article.
 
 import torch
 import math
-from rtm_torch.Resources.PROSAIL.dataSpec import *
-from rtm_torch.Resources.PROSAIL.SAILdata import *
+from physics.rtm.Resources.PROSAIL.dataSpec import *
+from physics.rtm.Resources.PROSAIL.SAILdata import *
 
 
 class Sail:

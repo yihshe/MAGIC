@@ -22,8 +22,8 @@ Jacquemoud S., & Baret F. (1990): PROSPECT: a model of leaf optical properties s
 '''
 
 import torch
-from rtm_torch.Resources.PROSAIL.dataSpec import *
-from rtm_torch.Resources.special import exp1
+from physics.rtm.Resources.PROSAIL.dataSpec import *
+from physics.rtm.Resources.special import exp1
 
 
 class Prospect:
