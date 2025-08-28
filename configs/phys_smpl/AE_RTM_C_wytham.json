@@ -18,15 +18,15 @@
             "dim_z_aux": 2,
             "dim_z_phy": 7,
             "activation": "elu",
+            "num_units_feat": 128,
             "hidlayers_feat": [
-                32
+                128
             ],
-            "num_units_feat": 64,
             "hidlayers_z_aux": [
-                32
+                128
             ],
             "hidlayers_z_phy": [
-                32
+                128
             ]
         }
     },
@@ -75,13 +75,14 @@
         ],
         "output_key": "spectrum",
         "stablize_grad": true,
+        "grad_clip_norm": 1.0,
         "tensorboard": false,
         "wandb": true,
         "phys_vae": {
-            "epochs_pretrain": 20, 
+            "epochs_pretrain": 20,
             "kl_warmup_epochs": 50,
-            "balance_gate": 0.001, 
-            "balance_data_aug": 1.0  
+            "balance_gate": 0.001,
+            "balance_data_aug": 1.0
         }
     }
 }

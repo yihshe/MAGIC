@@ -37,6 +37,9 @@ class PhysVAETrainerSMPL(BaseTrainer):
         # for Stage A bootstrap in u-space
         self.synthetic_data_loss_weight = config['trainer']['phys_vae'].get('balance_data_aug', 1.0)
 
+        # NEW: gradient clipping
+        self.grad_clip_norm = config['trainer'].get('grad_clip_norm', 1.0)
+
         # trackers
         self.train_metrics = MetricTracker(
             'loss', 'rec_loss', 'kl_loss', 'gate_mean',
@@ -95,6 +98,10 @@ class PhysVAETrainerSMPL(BaseTrainer):
                 loss = rec_loss + beta * kl_loss + self.gate_loss_weight * gate_mean
 
             loss.backward()
+
+            # NEW: gradient clipping for stability
+            if self.grad_clip_norm > 0:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
 
             if self.stablize_grad:
                 self._grad_stablizer(epoch, batch_idx, loss.item())
@@ -161,20 +168,36 @@ class PhysVAETrainerSMPL(BaseTrainer):
         self.model.eval()
         self.valid_metrics.reset()
 
+        total_rec_loss = 0.0
+        total_kl_loss = 0.0
+        num_batches = 0
+
         with torch.no_grad():
             for batch_idx, data_dict in enumerate(self.valid_data_loader):
-                data = data_dict[self.data_key].to(self.device)
-                input_const = {k: data_dict[k].to(self.device) for k in self.input_const_keys} if self.input_const_keys else None
-                if data.dim() == 3:
-                    data = data.view(-1, data.size(-1))
+                try:
+                    data = data_dict[self.data_key].to(self.device)
+                    input_const = {k: data_dict[k].to(self.device) for k in self.input_const_keys} if self.input_const_keys else None
+                    if data.dim() == 3:
+                        data = data.view(-1, data.size(-1))
 
-                z_phy_stat, z_aux_stat, x = self.model(data, hard_z=False, const=input_const)  # returns x_mean
-                rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x)
+                    z_phy_stat, z_aux_stat, x = self.model(data, hard_z=False, const=input_const)  # returns x_mean
+                    rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x)
 
-                self.valid_metrics.update('rec_loss', rec_loss.item())
-                self.valid_metrics.update('kl_loss', kl_loss.item())
+                    self.valid_metrics.update('rec_loss', rec_loss.item())
+                    self.valid_metrics.update('kl_loss', kl_loss.item())
+                    
+                    total_rec_loss += rec_loss.item()
+                    total_kl_loss += kl_loss.item()
+                    num_batches += 1
 
-        self.logger.info(f"Validation Epoch: {epoch} Rec Loss: {rec_loss.item():.6f} KL Loss: {kl_loss.item():.6f}")
+                except Exception as e:
+                    self.logger.warning(f"Error in validation batch {batch_idx}: {e}")
+                    continue
+
+        avg_rec_loss = total_rec_loss / max(num_batches, 1)
+        avg_kl_loss = total_kl_loss / max(num_batches, 1)
+        
+        self.logger.info(f"Validation Epoch: {epoch} Rec Loss: {avg_rec_loss:.6f} KL Loss: {avg_kl_loss:.6f}")
         return self.valid_metrics.result()
 
     def _vae_loss(self, data, z_phy_stat, z_aux_stat, x, pretrain=False):

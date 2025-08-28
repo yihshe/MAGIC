@@ -1,7 +1,30 @@
 """
-Simplified version of PhysVAE for ablation study.
-TODO - Rename some variables to avoid confusion
-TODO - Remove unnecessary lines of code
+Simplified version of PhysVAE for ablation study and model inversion framework.
+
+This implementation provides a cleaner, more interpretable version of the original PhysVAE
+framework with the following key features:
+
+1. **Simplified Architecture**: Removed unmixing path and complex components for clarity
+2. **U-space Representation**: Physics parameters are represented in u-space (unbounded) 
+   and transformed to z-space (0,1) via sigmoid
+3. **Additive Residual Correction**: Uses gated additive residual instead of complex 
+   multiplicative corrections
+4. **Two-stage Training**: 
+   - Stage A: Synthetic bootstrap for physics parameter learning
+   - Stage B: Full VAE training with KL divergence
+5. **Better Monitoring**: Enhanced logging and metrics for training stability
+
+Key Changes from Original:
+- KL divergence computed in u-space for physics parameters
+- Simplified decoder with explicit additive residual and gate
+- Removed unmixing path for cleaner ablation studies
+- Better initialization of gate parameters
+- Enhanced error handling and validation
+
+TODO:
+- Add more comprehensive ablation study configurations
+- Implement additional physics models beyond RTM
+- Add uncertainty quantification capabilities
 """
 import os
 import numpy as np
@@ -65,25 +88,30 @@ class Decoders(nn.Module):
         if not no_phy:
             if dim_z_aux >= 0:
                 # phy+aux context -> expanded features in x-space
-                self.func_aux_expand = MLP([dim_z_phy+dim_z_aux, 32, 64, in_channels], activation)
+                self.func_context = MLP([dim_z_phy+dim_z_aux, 64, 128], activation)
 
                 # CHANGED: residual head (corr) + gate
-                self.func_correction = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)
-                self.func_gate = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)
-                # NEW: init last linear bias to ~ -4 so sigmoid ~ 0 at start
-                try:
-                    last_linear = None
-                    for m in reversed(list(self.func_gate.modules())):
-                        if isinstance(m, nn.Linear):
-                            last_linear = m
-                            break
-                    if last_linear is not None and last_linear.bias is not None:
-                        nn.init.constant_(last_linear.bias, -4.0)
-                except Exception:
-                    pass
+                self.func_residual = MLP([in_channels + 128, 128, in_channels], activation)
+                self.func_gate = MLP([in_channels + 128, 64, in_channels], activation)
+                # NEW: init last linear bias to ~ -4.6 so sigmoid ~ 0.01 at start
+                self._init_gate_bias()
         else:
             # no phy
             self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
+
+    def _init_gate_bias(self):
+        """Initialize gate bias to start with low gate values (~0.01)"""
+        try:
+            # Find the last linear layer in the gate network
+            for module in reversed(list(self.func_gate.modules())):
+                if isinstance(module, nn.Linear):
+                    if module.bias is not None:
+                        # Initialize bias to -4.6 so sigmoid(-4.6) ≈ 0.01
+                        nn.init.constant_(module.bias, -4.6)
+                    break
+        except Exception as e:
+            print(f"Warning: Could not initialize gate bias: {e}")
+            pass
 
 class FeatureExtractor(nn.Module):
     def __init__(self, config:dict):
@@ -213,6 +241,11 @@ class PHYS_VAE_SMPL(nn.Module):
             return Physics_Mogi(config)
         else:
             raise ValueError("Unknown model type")
+        
+    def generate_physonly(self, z_phy:torch.Tensor, const:dict=None):
+        # here z_phy is in (0,1)
+        y = self.physics_model(z_phy, const=const) # (n, in_channels) 
+        return y
 
     def priors(self, n:int, device:torch.device):
         """
@@ -224,42 +257,6 @@ class PHYS_VAE_SMPL(nn.Module):
         prior_z_aux_stat = {'mean': torch.zeros(n, max(0,self.dim_z_aux), device=device),
                             'lnvar': torch.zeros(n, max(0,self.dim_z_aux), device=device)}
         return prior_u_phy_stat, prior_z_aux_stat
-
-    def generate_physonly(self, z_phy:torch.Tensor, const:dict=None):
-        # here z_phy is in (0,1)
-        y = self.physics_model(z_phy, const=const) # (n, in_channels) 
-        return y
-
-    def decode(self, z_phy:torch.Tensor, z_aux:torch.Tensor, full:bool=False, const:dict=None):
-        """
-        CHANGED: explicit additive residual with gate.
-                 Inputs to corr & gate: concat([x_P, expanded]), where expanded depends on [z_phy, z_aux].
-        """
-        if not self.no_phy:
-            y = self.physics_model(z_phy, const=const) # (n, in_channels)
-            x_P = y
-            if self.dim_z_aux >= 0:
-                expanded = self.dec.func_aux_expand(torch.cat([z_phy.detach(), z_aux], dim=1))  # CHANGED: detach z_phy
-                corr_in = torch.cat([x_P, expanded], dim=1)
-                corr = self.dec.func_correction(corr_in)
-                gate = torch.sigmoid(self.dec.func_gate(corr_in))
-                x_PB = x_P + gate * corr  # CHANGED: additive, gated
-            else:
-                x_PB = x_P.clone()
-                gate = torch.zeros_like(x_P)
-        else:
-            y = torch.zeros(z_phy.shape[0], self.in_channels, device=z_phy.device)
-            if self.dim_z_aux >= 0:
-                x_PB = self.dec.func_aux_dec(z_aux) 
-            else:
-               x_PB = torch.zeros(z_phy.shape[0], self.in_channels, device=z_phy.device)
-            x_P = x_PB.clone()
-            gate = torch.zeros_like(x_PB)
-
-        if full:
-            return x_PB, x_P, y, gate  # CHANGED: return gate for logging/penalty
-        else:
-            return x_PB
 
     def encode(self, x:torch.Tensor):
         """
@@ -306,6 +303,37 @@ class PHYS_VAE_SMPL(nn.Module):
             z_phy = torch.zeros(u_phy.shape[0], self.in_channels, device=u_phy.device)
 
         return z_phy, z_aux
+
+    def decode(self, z_phy:torch.Tensor, z_aux:torch.Tensor, full:bool=False, const:dict=None):
+        """
+        CHANGED: explicit additive residual with gate.
+                 Inputs to corr & gate: concat([x_P, expanded]), where expanded depends on [z_phy, z_aux].
+        """
+        if not self.no_phy:
+            y = self.physics_model(z_phy, const=const) # (n, in_channels)
+            x_P = y
+            if self.dim_z_aux >= 0:
+                context = self.dec.func_context(torch.cat([z_phy.detach(), z_aux], dim=1))  # CHANGED: detach z_phy
+                h = torch.cat([x_P, context], dim=1)
+                delta = self.dec.func_residual(h)
+                gate = torch.sigmoid(self.dec.func_gate(h))
+                x_PB = x_P + gate * delta  # CHANGED: additive, gated
+            else:
+                x_PB = x_P.clone()
+                gate = torch.zeros_like(x_P)
+        else:
+            y = torch.zeros(z_phy.shape[0], self.in_channels, device=z_phy.device)
+            if self.dim_z_aux >= 0:
+                x_PB = self.dec.func_aux_dec(z_aux) 
+            else:
+               x_PB = torch.zeros(z_phy.shape[0], self.in_channels, device=z_phy.device)
+            x_P = x_PB.clone()
+            gate = torch.zeros_like(x_PB)
+
+        if full:
+            return x_PB, x_P, y, gate  # CHANGED: return gate for logging/penalty
+        else:
+            return x_PB
 
     def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False,
                 inference:bool=False, const:dict=None):
