@@ -1,0 +1,83 @@
+{
+    "name": "PHYS_VAE_RTM_C_AUSTRIA_SMPL",
+    "n_gpu": 1,
+    "arch": {
+        "type": "PHYS_VAE_SMPL",
+        "args": {
+            "physics": "RTM",
+            "input_dim": 11,
+            "hidden_dim": 7,
+            "rtm_paras": "configs/rtm_paras.json",
+            "standardization": {
+                "x_mean": "data/processed/rtm/real/train_x_mean.npy",
+                "x_scale": "data/processed/rtm/real/train_x_scale.npy"
+            }
+        },
+        "phys_vae": {
+            "no_phy": false,
+            "dim_z_aux": 2,
+            "dim_z_phy": 7,
+            "activation": "elu",
+            "num_units_feat": 128,
+            "hidlayers_feat": [
+                128
+            ],
+            "hidlayers_z_aux": [
+                128
+            ],
+            "hidlayers_z_phy": [
+                128
+            ]
+        }
+    },
+    "data_loader": {
+        "type": "SpectrumS2DataLoader",
+        "args": {
+            "data_dir": "data/processed/rtm/real/train.csv",
+            "batch_size": 256,
+            "shuffle": true,
+            "validation_split": 0.0,
+            "num_workers": 4,
+            "with_const": false
+        },
+        "data_dir_valid": "data/processed/rtm/real/valid.csv",
+        "data_dir_test": "data/processed/rtm/real/test.csv"
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 0.0003,
+            "weight_decay": 0.0001,
+            "amsgrad": true
+        }
+    },
+    "loss": "mse_loss",
+    "metrics": [],
+    "lr_scheduler": {
+        "type": "CosineAnnealingLR",
+        "args": {
+            "T_max": 150
+        }
+    },
+    "trainer": {
+        "epochs": 150,
+        "save_dir": "saved/rtm",
+        "save_period": 10,
+        "log_step": 5,
+        "verbosity": 2,
+        "monitor": "min val_rec_loss",
+        "early_stop": 20,
+        "input_key": "spectrum",
+        "output_key": "spectrum",
+        "stablize_grad": true,
+        "grad_clip_norm": 1.0,
+        "tensorboard": false,
+        "wandb": true,
+        "phys_vae": {
+            "epochs_pretrain": 20,
+            "kl_warmup_epochs": 50,
+            "balance_gate": 0.001,
+            "balance_data_aug": 1.0
+        }
+    }
+}

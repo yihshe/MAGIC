@@ -61,7 +61,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         
-        seqence_len = None
+        sequence_len = None
         beta = self._linear_annealing_epoch(epoch-1, warmup_epochs=self.beta_warmup)  # NEW
 
         # NEW: accumulators for u-stats
@@ -74,7 +74,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
             input_const = {k: data_dict[k].to(self.device) for k in self.input_const_keys} if self.input_const_keys else None
 
             if data.dim() == 3:
-                seqence_len = data.size(1)
+                sequence_len = data.size(1)
                 data = data.view(-1, data.size(-1))
 
             self.optimizer.zero_grad()

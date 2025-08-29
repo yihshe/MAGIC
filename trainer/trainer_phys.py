@@ -73,7 +73,7 @@ class PhysVAETrainer(BaseTrainer):
         self.train_metrics.reset()
         
         # Sequence length, for the 'GPSSeqDataLoader' used in Mogi model
-        seqence_len = None
+        sequence_len = None
 
         for batch_idx, data_dict in enumerate(self.data_loader):
             data = data_dict[self.data_key].to(self.device)
@@ -84,7 +84,7 @@ class PhysVAETrainer(BaseTrainer):
                 input_const = None
 
             if data.dim() == 3:
-                seqence_len = data.size(1)
+                sequence_len = data.size(1)
                 data = data.view(-1, data.size(-1))
 
             self.optimizer.zero_grad()
@@ -115,7 +115,7 @@ class PhysVAETrainer(BaseTrainer):
             least_action_loss = self._least_action_loss(x_PB, x_P) 
 
             # Sequence smoothness regularization (for Mogi model)
-            smoothness_loss = self._sequence_smoothness_loss(x_P, seqence_len)
+            smoothness_loss = self._sequence_smoothness_loss(x_P, sequence_len)
 
             
             # Total loss 
@@ -294,16 +294,16 @@ class PhysVAETrainer(BaseTrainer):
         else:
             return torch.zeros(1, device=self.device)
     
-    def _sequence_smoothness_loss(self, x_P, seqence_len=None):
+    def _sequence_smoothness_loss(self, x_P, sequence_len=None):
         """
         Compute the smoothness regularization loss for a sequence.
 
         :param x_P: Predicted physics-only signal.
-        :param seqence_len: Length of the sequence.
+        :param sequence_len: Length of the sequence.
         :return: Smoothness loss.
         """
-        if not self.no_phy and seqence_len is not None:
-            x_P_reshaped = x_P.view(-1, seqence_len, x_P.size(-1))
+        if not self.no_phy and sequence_len is not None:
+            x_P_reshaped = x_P.view(-1, sequence_len, x_P.size(-1))
             diff = x_P_reshaped[:, 1:, :] - x_P_reshaped[:, :-1, :]
             return torch.mean(diff**2)
         else:
