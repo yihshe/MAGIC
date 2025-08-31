@@ -20,11 +20,10 @@ def main(config):
     data_loader = getattr(module_data, config['data_loader']['type'])(
         config['data_loader']['data_dir_test'],
         batch_size=512,
-        shuffle=False,
+        shuffle=False, 
         validation_split=0.0,
         num_workers=2
     )
-
     # build model architecture
     model = config.init_obj('arch', module_arch)
     logger.info(model)

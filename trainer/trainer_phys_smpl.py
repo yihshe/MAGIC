@@ -1,6 +1,13 @@
 """
 Simplified version of PhysVAE for ablation study.
 TODO add wandb logging to check the balance between different terms.
+
+NEW METRICS ADDED:
+- residual_loss: L2 difference between raw physics output (x_P) and corrected output (x_PB)
+- residual_rel_diff: Relative difference as percentage of raw output magnitude
+  This helps monitor how much the correction layer is modifying the physics output.
+  Lower values indicate the correction is making smaller changes.
+  The residual_loss is computed as torch.sum((x_PB - x_P).pow(2), dim=1).mean().
 """
 # Adapted from the training script of Phys-VAE
 import numpy as np
@@ -44,8 +51,10 @@ class PhysVAETrainerSMPL(BaseTrainer):
         self.train_metrics = MetricTracker(
             'loss', 'rec_loss', 'kl_loss', 'gate_mean',
             'syn_data_loss',  # diagnostic
+            'residual_loss',  # NEW: L2 difference between raw and corrected output
+            'residual_rel_diff',  # NEW: relative difference as percentage
             *[m.__name__ for m in metric_ftns], writer=self.writer)
-        self.valid_metrics = MetricTracker('rec_loss', 'kl_loss', *[m.__name__ for m in metric_ftns], writer=self.writer)
+        self.valid_metrics = MetricTracker('rec_loss', 'kl_loss', 'residual_loss', 'residual_rel_diff', *[m.__name__ for m in metric_ftns], writer=self.writer)
 
         self.data_key = config['trainer']['input_key']
         self.target_key = config['trainer']['output_key']
@@ -90,6 +99,11 @@ class PhysVAETrainerSMPL(BaseTrainer):
             rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
             gate_mean = gate.mean()
 
+            # NEW: Compute L2 difference between raw physics output and corrected output
+            residual_loss = torch.sum((x_PB - x_P).pow(2), dim=1).mean()
+            # Also compute relative difference as percentage of raw output magnitude
+            residual_rel_diff = torch.mean(torch.abs(x_PB - x_P) / (torch.abs(x_P) + 1e-8)) * 100.0
+
             # Stage A: synthetic bootstrap (u-target)
             if not self.no_phy and epoch < self.epochs_pretrain:
                 synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
@@ -113,6 +127,8 @@ class PhysVAETrainerSMPL(BaseTrainer):
             self.train_metrics.update('rec_loss', rec_loss.item())
             self.train_metrics.update('kl_loss', kl_loss.item())
             self.train_metrics.update('gate_mean', gate_mean.item())
+            self.train_metrics.update('residual_loss', residual_loss.item())  # NEW: log residual_loss
+            self.train_metrics.update('residual_rel_diff', residual_rel_diff.item())  # NEW: log relative difference
             if not self.no_phy and epoch < self.epochs_pretrain:
                 self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
 
@@ -133,16 +149,37 @@ class PhysVAETrainerSMPL(BaseTrainer):
                     f"Train Ep {epoch} [{batch_idx}/{len(self.data_loader)}] "
                     f"Loss {loss.item():.6f} Rec {rec_loss.item():.6f} "
                     f"KL(beta={beta:.3f}) {kl_loss.item():.6f} "
-                    f"Gate(mean) {gate_mean.item():.6f}"
+                    f"Gate(mean) {gate_mean.item():.6f} "
+                    f"Residual {residual_loss.item():.6f} "
+                    f"residual_rel_diff {residual_rel_diff.item():.2f}% "
+                    f"(Gate: correction strength, Residual: physics vs corrected L2 diff)"
                 )
 
         log = self.train_metrics.result()
+
+        # Log epoch summary including residual_loss
+        self.logger.info(
+            f"Epoch {epoch} Summary - "
+            f"Loss: {log['loss']:.6f}, "
+            f"Rec: {log['rec_loss']:.6f}, "
+            f"KL: {log['kl_loss']:.6f}, "
+            f"Gate: {log['gate_mean']:.6f}, "
+            f"Residual: {log['residual_loss']:.6f}, "
+            f"residual_rel_diff: {log['residual_rel_diff']:.2f}% "
+            f"(Gate: correction strength, Residual: physics vs corrected L2 diff)"
+        )
 
         # wandb logs
         wandb.log({f'train/{key}': value for key, value in log.items()})
         wandb.log({'train/lr': self.optimizer.param_groups[0]['lr']})
         wandb.log({'train/epoch': epoch})
         wandb.log({'train/beta': beta})
+        
+        # Additional context for x_p_diff interpretation
+        if log['gate_mean'] > 0.5:
+            wandb.log({'train/correction_comment': 'High correction activity (gate > 0.5)'})
+        else:
+            wandb.log({'train/correction_comment': 'Low correction activity (gate < 0.5)'})
 
         # per-dim u stats (epoch-aggregated)
         if not self.no_phy and self.log_u_stats and u_count > 0:
@@ -158,6 +195,15 @@ class PhysVAETrainerSMPL(BaseTrainer):
             log.update(**{'val_' + k: v for k, v in val_log.items()})
             wandb.log({f'val/{key}': value for key, value in val_log.items()})
             wandb.log({'val/epoch': epoch})
+            
+            # Additional context for validation residual_loss interpretation
+            if 'val_residual_rel_diff' in val_log:
+                if val_log['val_residual_rel_diff'] > 10.0:
+                    wandb.log({'val/correction_comment': 'High correction impact (>10% change)'})
+                elif val_log['val_residual_rel_diff'] > 5.0:
+                    wandb.log({'val/correction_comment': 'Moderate correction impact (5-10% change)'})
+                else:
+                    wandb.log({'val/correction_comment': 'Low correction impact (<5% change)'})
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
@@ -180,11 +226,22 @@ class PhysVAETrainerSMPL(BaseTrainer):
                     if data.dim() == 3:
                         data = data.view(-1, data.size(-1))
 
-                    z_phy_stat, z_aux_stat, x = self.model(data, hard_z=False, const=input_const)  # returns x_mean
-                    rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x)
+                    # Get full model output to compute residual_loss
+                    z_phy_stat, z_aux_stat = self.model.encode(data)
+                    z_phy, z_aux = self.model.draw(z_phy_stat, z_aux_stat, hard_z=False)
+                    x_PB, x_P, y, gate = self.model.decode(z_phy, z_aux, full=True, const=input_const)
+                    
+                    rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
+                    
+                    # Compute residual_loss for validation (L2 difference)
+                    residual_loss = torch.sum((x_PB - x_P).pow(2), dim=1).mean()
+                    # Also compute relative difference as percentage
+                    residual_rel_diff = torch.mean(torch.abs(x_PB - x_P) / (torch.abs(x_P) + 1e-8)) * 100.0
 
                     self.valid_metrics.update('rec_loss', rec_loss.item())
                     self.valid_metrics.update('kl_loss', kl_loss.item())
+                    self.valid_metrics.update('residual_loss', residual_loss.item())
+                    self.valid_metrics.update('residual_rel_diff', residual_rel_diff.item())
                     
                     total_rec_loss += rec_loss.item()
                     total_kl_loss += kl_loss.item()
@@ -197,7 +254,11 @@ class PhysVAETrainerSMPL(BaseTrainer):
         avg_rec_loss = total_rec_loss / max(num_batches, 1)
         avg_kl_loss = total_kl_loss / max(num_batches, 1)
         
-        self.logger.info(f"Validation Epoch: {epoch} Rec Loss: {avg_rec_loss:.6f} KL Loss: {avg_kl_loss:.6f}")
+        # Compute average residual_loss for validation logging
+        val_metrics = self.valid_metrics.result()
+        avg_residual_loss = val_metrics['residual_loss']
+        avg_residual_rel_diff = val_metrics['residual_rel_diff']
+        self.logger.info(f"Validation Epoch: {epoch} Rec Loss: {avg_rec_loss:.6f} KL Loss: {avg_kl_loss:.6f} Residual: {avg_residual_loss:.6f} residual_rel_diff: {avg_residual_rel_diff:.2f}% (Physics vs Corrected)")
         return self.valid_metrics.result()
 
     def _vae_loss(self, data, z_phy_stat, z_aux_stat, x, pretrain=False):
