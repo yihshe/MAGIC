@@ -225,11 +225,11 @@ class PHYS_VAE_SMPL(nn.Module):
         self.activation = config['arch']['phys_vae']['activation']
         self.in_channels = config['arch']['args']['input_dim']
 
-        # Decoding part
-        self.dec = Decoders(config)
-
         # Encoding part
         self.enc = Encoders(config)
+
+        # Decoding part
+        self.dec = Decoders(config)
 
         # Physics
         self.physics_model = self.physics_init(config)

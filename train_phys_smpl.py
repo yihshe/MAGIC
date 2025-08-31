@@ -55,7 +55,7 @@ def main(config):
 
     # CHANGED: make scheduler optional
     lr_scheduler = None
-    if 'lr_scheduler' in config:
+    if 'lr_scheduler' in config.config:
         lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimizer)
 
     # Initialize Phys-VAE Trainer
