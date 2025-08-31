@@ -66,12 +66,30 @@ class PhysVAETrainerSMPL(BaseTrainer):
         # NEW (optional): running stats of u per-dim
         self.log_u_stats = True
 
+        # NEW: Store initial learning rate for pretraining
+        self.initial_lr = self.optimizer.param_groups[0]['lr']
+
     def _train_epoch(self, epoch):
         self.model.train()
         self.train_metrics.reset()
         
+        # NEW: Reset learning rate to initial value during pretraining
+        if epoch < self.epochs_pretrain:
+            # Pretraining phase: use initial learning rate (no scheduling)
+            if self.optimizer.param_groups[0]['lr'] != self.initial_lr:
+                self.optimizer.param_groups[0]['lr'] = self.initial_lr
+                self.logger.info(f"Epoch {epoch}: Using initial LR for pretraining: {self.initial_lr}")
+        else:
+            # Training phase: let scheduler handle learning rate
+            if epoch == self.epochs_pretrain:
+                self.logger.info(f"Epoch {epoch}: Starting training phase, scheduler will control LR")
+        
         sequence_len = None
-        beta = self._linear_annealing_epoch(epoch-1, warmup_epochs=self.beta_warmup)  # NEW
+        # Only compute beta when not in pretraining stage
+        if not self.no_phy and epoch >= self.epochs_pretrain:
+            beta = self._linear_annealing_epoch(epoch-1, warmup_epochs=self.beta_warmup)
+        else:
+            beta = 0.0  # No KL loss during pretraining
 
         # NEW: accumulators for u-stats
         u_sum = None
@@ -157,7 +175,8 @@ class PhysVAETrainerSMPL(BaseTrainer):
 
         log = self.train_metrics.result()
 
-        # Log epoch summary including residual_loss
+        # Log epoch summary including residual_loss and current learning rate
+        current_lr = self.optimizer.param_groups[0]['lr']
         self.logger.info(
             f"Epoch {epoch} Summary - "
             f"Loss: {log['loss']:.6f}, "
@@ -165,7 +184,8 @@ class PhysVAETrainerSMPL(BaseTrainer):
             f"KL: {log['kl_loss']:.6f}, "
             f"Gate: {log['gate_mean']:.6f}, "
             f"Residual: {log['residual_loss']:.6f}, "
-            f"residual_rel_diff: {log['residual_rel_diff']:.2f}% "
+            f"residual_rel_diff: {log['residual_rel_diff']:.2f}%, "
+            f"LR: {current_lr:.6f} "
             f"(Gate: correction strength, Residual: physics vs corrected L2 diff)"
         )
 
@@ -288,6 +308,10 @@ class PhysVAETrainerSMPL(BaseTrainer):
         """
         Synthetic inversion loss in u-space:
         sample z~Uniform(0,1), simulate y, infer u_mean, and match to logit(z).
+        
+        This loss pretrains the encoder to learn the inverse mapping from physics
+        outputs back to latent parameters, establishing a good initialization
+        before introducing KL divergence terms.
         """
         if not self.no_phy:
             self.model.eval()

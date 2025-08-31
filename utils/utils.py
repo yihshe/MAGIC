@@ -78,11 +78,15 @@ def kldiv_normal_normal(mean1:torch.Tensor, lnvar1:torch.Tensor, mean2:torch.Ten
     """
     KL divergence between normal distributions, KL( N(mean1, diag(exp(lnvar1))) || N(mean2, diag(exp(lnvar2))) )
     """
-    if lnvar1.ndim==2 and lnvar2.ndim==2:
-        return 0.5 * torch.sum((lnvar1-lnvar2).exp() - 1.0 + lnvar2 - lnvar1 + (mean2-mean1).pow(2)/lnvar2.exp(), dim=1)
-    elif lnvar1.ndim==1 and lnvar2.ndim==1:
+    # NEW: Clamp lnvar to prevent numerical instability (consistent with draw_normal)
+    lnvar1_clamped = lnvar1.clamp(-9.0, 5.0)
+    lnvar2_clamped = lnvar2.clamp(-9.0, 5.0)
+    
+    if lnvar1_clamped.ndim==2 and lnvar2_clamped.ndim==2:
+        return 0.5 * torch.sum((lnvar1_clamped-lnvar2_clamped).exp() - 1.0 + lnvar2_clamped - lnvar1_clamped + (mean2-mean1).pow(2)/lnvar2_clamped.exp(), dim=1)
+    elif lnvar1_clamped.ndim==1 and lnvar2_clamped.ndim==1:
         d = mean1.shape[1]
-        return 0.5 * (d*((lnvar1-lnvar2).exp() - 1.0 + lnvar2 - lnvar1) + torch.sum((mean2-mean1).pow(2), dim=1)/lnvar2.exp())
+        return 0.5 * (d*((lnvar1_clamped-lnvar2_clamped).exp() - 1.0 + lnvar2_clamped - lnvar1_clamped) + torch.sum((mean2-mean1).pow(2), dim=1)/lnvar2_clamped.exp())
     else:
         raise ValueError()
     
@@ -103,6 +107,8 @@ def actmodule(activation:str):
         raise ValueError('unknown activation function specified')
 
 def draw_normal(mean:torch.Tensor, lnvar:torch.Tensor):
-    std = torch.exp(0.5*lnvar) #TODO lnvar and reparameterization in VAE
+    # NEW: Clamp lnvar to prevent numerical instability
+    lnvar_clamped = lnvar.clamp(-9.0, 5.0)
+    std = torch.exp(0.5*lnvar_clamped) #TODO lnvar and reparameterization in VAE
     eps = torch.randn_like(std) # reparametrization trick
     return mean + eps*std
