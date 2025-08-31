@@ -72,7 +72,7 @@
         "stablize_grad": true,
         "grad_clip_norm": 1.0,
         "tensorboard": false,
-        "wandb": true,
+        "wandb": false,
         "phys_vae": {
             "epochs_pretrain": 20,
             "kl_warmup_epochs": 50,
