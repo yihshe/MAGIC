@@ -44,19 +44,27 @@ class PhysVAETrainerSMPL(BaseTrainer):
         # for Stage A bootstrap in u-space
         self.synthetic_data_loss_weight = config['trainer']['phys_vae'].get('balance_data_aug', 1.0)
         
-        # NEW: Pre-gate residual penalty weight
-        self.residual_loss_weight = config['trainer']['phys_vae'].get('balance_residual', 1e-4)  # NEW
+        # NEW: Loss weights for improved residual architecture
+        self.ortho_penalty_weight = config['trainer']['phys_vae'].get('ortho_penalty_weight', 0.1)
+        self.coeff_penalty_weight = config['trainer']['phys_vae'].get('coeff_penalty_weight', 1e-4)
+        self.delta_penalty_weight = config['trainer']['phys_vae'].get('delta_penalty_weight', 1e-4)
 
         # NEW: gradient clipping
         self.grad_clip_norm = config['trainer'].get('grad_clip_norm', 1.0)
 
         # trackers
         self.train_metrics = MetricTracker(
-            'loss', 'rec_loss', 'kl_loss', 'gate_mean',
+            'loss', 'rec_loss', 'kl_loss',
             'syn_data_loss',  # diagnostic
-            'residual_loss',  # NEW: L2 difference between raw and corrected output
-            'residual_rel_diff',  # NEW: relative difference as percentage
-            'pregate_residual_loss',  # NEW: pre-gate residual penalty
+            'residual_loss',  # L2 difference between raw and corrected output
+            'residual_rel_diff',  # relative difference as percentage
+            'ortho_penalty',  # orthogonality penalty for basis matrix
+            'coeff_penalty',  # coefficient L2 penalty
+            'delta_penalty',  # delta L2 penalty
+            'c_norm',  # norm of coefficient vector
+            'delta_norm',  # norm of residual vector
+            's_norm',  # norm of scale parameters
+            'basis_quality',  # ||B^T B - I||_F
             *[m.__name__ for m in metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('rec_loss', 'kl_loss', 'residual_loss', 'residual_rel_diff', *[m.__name__ for m in metric_ftns], writer=self.writer)
 
@@ -117,36 +125,41 @@ class PhysVAETrainerSMPL(BaseTrainer):
 
             # Draw + decode
             z_phy, z_aux = self.model.draw(z_phy_stat, z_aux_stat, hard_z=False)
-            x_PB, x_P, y, gate = self.model.decode(z_phy, z_aux, full=True, const=input_const)
-
-            # NEW: Get pre-gate residual for penalty (δ²)
-            if not self.no_phy and epoch >= self.epochs_pretrain:
-                # Compute delta separately since it's not returned by decode
-                with torch.no_grad():
-                    context = self.model.dec.func_context(torch.cat([z_phy.detach(), z_aux], dim=1))
-                    h = torch.cat([x_P, context], dim=1)
-                    delta = self.model.dec.func_residual(h)
-            else:
-                delta = torch.zeros_like(x_P)
+            x_PB, x_P, y, delta, c = self.model.decode(z_phy, z_aux, epoch=epoch, epochs_pretrain=self.epochs_pretrain, full=True, const=input_const)
 
             # Losses
             rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
-            gate_mean = gate.mean()
 
-            # NEW: Compute L2 difference between raw physics output and corrected output
+            # Compute L2 difference between raw physics output and corrected output
             residual_loss = torch.sum((x_PB - x_P).pow(2), dim=1).mean()
-            # Also compute relative difference as percentage of raw output magnitude (capped for stability)
+            # Also compute relative difference as percentage of raw output magnitude
             residual_rel_diff = torch.mean(torch.abs(x_PB - x_P) / (torch.abs(x_P) + 1e-8)) * 100.0
-            # residual_rel_diff = torch.clamp(residual_rel_diff, 0.0, 100.0)  # Cap at 100% to avoid confusion
+
+            # IMPROVED: Low-rank residual regularization terms
+            if not self.no_phy and epoch >= self.epochs_pretrain:
+                # Orthogonality penalty: λ_B ||B^T B - I||_F^2
+                ortho_penalty = self.model.dec.orthogonality_penalty()
+                
+                # Coefficient penalty: λ_c ||c||_2^2
+                coeff_penalty = torch.sum(c.pow(2), dim=1).mean()
+                
+                # Delta penalty: λ_Δ ||δ||_2^2
+                delta_penalty = torch.sum(delta.pow(2), dim=1).mean()
+            else:
+                ortho_penalty = torch.tensor(0.0, device=data.device)
+                coeff_penalty = torch.tensor(0.0, device=data.device)
+                delta_penalty = torch.tensor(0.0, device=data.device)
 
             # Stage A: synthetic bootstrap (u-target)
             if not self.no_phy and epoch < self.epochs_pretrain:
                 synthetic_data_loss = self._synthetic_data_loss(data.shape[0])
                 loss = self.synthetic_data_loss_weight * synthetic_data_loss
             else:
-                # NEW: Add pre-gate residual penalty (δ²)
-                pregate_residual_loss = torch.sum(delta.pow(2), dim=1).mean()
-                loss = rec_loss + beta * kl_loss + self.gate_loss_weight * gate_mean + self.residual_loss_weight * pregate_residual_loss
+                # IMPROVED: Complete loss function
+                loss = (rec_loss + beta * kl_loss + 
+                       self.ortho_penalty_weight * ortho_penalty +
+                       self.coeff_penalty_weight * coeff_penalty +
+                       self.delta_penalty_weight * delta_penalty)
 
             loss.backward()
 
@@ -163,14 +176,27 @@ class PhysVAETrainerSMPL(BaseTrainer):
             self.train_metrics.update('loss', loss.item())
             self.train_metrics.update('rec_loss', rec_loss.item())
             self.train_metrics.update('kl_loss', kl_loss.item())
-            self.train_metrics.update('gate_mean', gate_mean.item())
-            self.train_metrics.update('residual_loss', residual_loss.item())  # NEW: log residual_loss
-            self.train_metrics.update('residual_rel_diff', residual_rel_diff.item())  # NEW: log relative difference
+            self.train_metrics.update('residual_loss', residual_loss.item())
+            self.train_metrics.update('residual_rel_diff', residual_rel_diff.item())
+            
             if not self.no_phy and epoch < self.epochs_pretrain:
                 self.train_metrics.update('syn_data_loss', synthetic_data_loss.item())
             else:
-                # NEW: Track pre-gate residual loss
-                self.train_metrics.update('pregate_residual_loss', pregate_residual_loss.item())
+                # IMPROVED: Track all residual metrics
+                self.train_metrics.update('ortho_penalty', ortho_penalty.item())
+                self.train_metrics.update('coeff_penalty', coeff_penalty.item())
+                self.train_metrics.update('delta_penalty', delta_penalty.item())
+                
+                # Track norms for monitoring
+                c_norm = torch.norm(c, dim=1).mean().item() if c.numel() > 0 else 0.0
+                delta_norm = torch.norm(delta, dim=1).mean().item()
+                s_norm = torch.norm(self.model.dec.s).item() if hasattr(self.model.dec, 's') else 0.0
+                basis_quality = torch.norm(torch.matmul(self.model.dec.B.T, self.model.dec.B) - torch.eye(self.model.dec.B.shape[1], device=self.model.dec.B.device), p='fro').item()
+                
+                self.train_metrics.update('c_norm', c_norm)
+                self.train_metrics.update('delta_norm', delta_norm)
+                self.train_metrics.update('s_norm', s_norm)
+                self.train_metrics.update('basis_quality', basis_quality)
 
             # Optional u-stats
             if not self.no_phy and self.log_u_stats:
@@ -188,14 +214,13 @@ class PhysVAETrainerSMPL(BaseTrainer):
                 log_str = (f"Train Ep {epoch} [{batch_idx}/{len(self.data_loader)}] "
                           f"Loss {loss.item():.6f} Rec {rec_loss.item():.6f} "
                           f"KL(beta={beta:.3f}) {kl_loss.item():.6f} "
-                          f"Gate(mean) {gate_mean.item():.6f} "
                           f"Residual {residual_loss.item():.6f} "
                           f"residual_rel_diff {residual_rel_diff.item():.2f}%")
                 
                 if not self.no_phy and epoch >= self.epochs_pretrain:
-                    log_str += f" PreGateRes {pregate_residual_loss.item():.6f}"
+                    log_str += f" Ortho {ortho_penalty.item():.6f} Coeff {coeff_penalty.item():.6f} Delta {delta_penalty.item():.6f}"
                 
-                log_str += " (Gate: correction strength, Residual: physics vs corrected L2 diff)"
+                # log_str += " (Gate: correction strength, Residual: physics vs corrected L2 diff)"
                 self.logger.info(log_str)
 
         log = self.train_metrics.result()
@@ -206,15 +231,26 @@ class PhysVAETrainerSMPL(BaseTrainer):
                       f"Loss: {log['loss']:.6f}, "
                       f"Rec: {log['rec_loss']:.6f}, "
                       f"KL: {log['kl_loss']:.6f}, "
-                      f"Gate: {log['gate_mean']:.6f}, "
                       f"Residual: {log['residual_loss']:.6f}, "
                       f"residual_rel_diff: {log['residual_rel_diff']:.2f}%, "
                       f"LR: {current_lr:.6f}")
         
-        if not self.no_phy and epoch >= self.epochs_pretrain and 'pregate_residual_loss' in log:
-            summary_str += f", PreGateRes: {log['pregate_residual_loss']:.6f}"
+        # Add r(t) and tau monitoring
+        if not self.no_phy:
+            r_value = self.model.dec.get_r(epoch, self.epochs_pretrain)
+            tau_value = self.model.dec.get_tau(epoch, self.epochs_pretrain)
+            summary_str += f", r(t): {r_value:.3f}, tau: {tau_value:.3f}"
         
-        summary_str += " (Gate: correction strength, Residual: physics vs corrected L2 diff)"
+        # Add residual penalties if available
+        if not self.no_phy and epoch >= self.epochs_pretrain:
+            if 'ortho_penalty' in log:
+                summary_str += f", Ortho: {log['ortho_penalty']:.6f}"
+            if 'coeff_penalty' in log:
+                summary_str += f", Coeff: {log['coeff_penalty']:.6f}"
+            if 'delta_penalty' in log:
+                summary_str += f", Delta: {log['delta_penalty']:.6f}"
+        
+        # summary_str += " (Gate: correction strength, Residual: physics vs corrected L2 diff)"
         self.logger.info(summary_str)
 
         # wandb logs
@@ -224,10 +260,10 @@ class PhysVAETrainerSMPL(BaseTrainer):
         wandb.log({'train/beta': beta})
         
         # Additional context for x_p_diff interpretation
-        if log['gate_mean'] > 0.5:
-            wandb.log({'train/correction_comment': 'High correction activity (gate > 0.5)'})
-        else:
-            wandb.log({'train/correction_comment': 'Low correction activity (gate < 0.5)'})
+        # if log['gate_mean'] > 0.5:
+        #     wandb.log({'train/correction_comment': 'High correction activity (gate > 0.5)'})
+        # else:
+        #     wandb.log({'train/correction_comment': 'Low correction activity (gate < 0.5)'})
 
         # per-dim u stats (epoch-aggregated)
         if not self.no_phy and self.log_u_stats and u_count > 0:
@@ -277,7 +313,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
                     # Get full model output to compute residual_loss
                     z_phy_stat, z_aux_stat = self.model.encode(data)
                     z_phy, z_aux = self.model.draw(z_phy_stat, z_aux_stat, hard_z=False)
-                    x_PB, x_P, y, gate = self.model.decode(z_phy, z_aux, full=True, const=input_const)
+                    x_PB, x_P, y, delta, c = self.model.decode(z_phy, z_aux, epoch=epoch, epochs_pretrain=self.epochs_pretrain, full=True, const=input_const)
                     
                     rec_loss, kl_loss = self._vae_loss(data, z_phy_stat, z_aux_stat, x_PB)
                     

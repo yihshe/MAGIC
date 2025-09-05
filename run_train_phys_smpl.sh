@@ -14,9 +14,9 @@ $PYTHON_CMD -m train_phys_smpl --config configs/phys_smpl/AE_RTM_C_austria.json
 
 # Alternative: Test the trained model
 # $PYTHON_CMD -m test_phys_rtm_smpl \
-#         --config saved/rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/config.json \
-#         --resume saved/rtm/models/PHYS_VAE_RTM_C_WYTHAM_SMPL/checkpoint-epochX.pth \
-#         --insitu
+#         --config saved/rtm/PHYS_VAE_RTM_C_AUSTRIA_SMPL/0831_211338/models/config.json \
+#         --resume saved/rtm/PHYS_VAE_RTM_C_AUSTRIA_SMPL/0831_211338/models/model_best.pth \
+#         # --insitu
 
 # #---------------ALL EXPERIMENTS-----------------
 # # Run Wytham RTM experiments

@@ -21,7 +21,7 @@ def main(config, args: argparse.Namespace):
     if args.insitu:
         data_dir_test = config['data_loader']['data_dir_test'].replace('test.csv', 'test_frm4veg.csv')
     else:
-        data_dir_test = config['data_loader']['data_dir_valid']
+        data_dir_test = config['data_loader']['data_dir_test']
     # setup data_loader instances
     data_loader = getattr(module_data, config['data_loader']['type'])(
         data_dir = data_dir_test,

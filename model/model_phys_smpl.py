@@ -62,6 +62,7 @@ class Encoders(nn.Module):
 
         if dim_z_aux > 0:
             hidlayers_z_aux = config['arch']['phys_vae']['hidlayers_z_aux']
+            # z_aux encoding from feature only (as before)
             self.func_z_aux_mean = MLP([num_units_feat,]+hidlayers_z_aux+[dim_z_aux,], activation)
             self.func_z_aux_lnvar = MLP([num_units_feat,]+hidlayers_z_aux+[dim_z_aux,], activation)
 
@@ -87,31 +88,74 @@ class Decoders(nn.Module):
 
         if not no_phy:
             if dim_z_aux >= 0:
-                # phy+aux context -> expanded features in x-space
-                self.func_context = MLP([dim_z_phy+dim_z_aux, 64, 128], activation)
-
-                # CHANGED: residual head (corr) + gate
-                self.func_residual = MLP([in_channels + 128, 128, in_channels], activation)
-                self.func_gate = MLP([in_channels + 128, 64, in_channels], activation)
-                # NEW: init last linear bias to ~ -4.6 so sigmoid ~ 0.01 at start
-                self._init_gate_bias()
+                # IMPROVED: [z_aux, x_P_det] -> Linear -> c -> tanh(c/tau) -> delta = (c*s)@B.T
+                residual_rank = config['arch']['phys_vae'].get('residual_rank', dim_z_aux)  # Default to dim_z_aux
+                
+                # Linear coefficient transformation: [z_aux, x_P_det] -> residual_rank
+                coeff_input_dim = dim_z_aux + in_channels  # z_aux + x_P
+                self.coeff = nn.Linear(coeff_input_dim, residual_rank, bias=True)
+                
+                # Per-direction scale parameters
+                self.s = nn.Parameter(torch.ones(residual_rank))  # per-direction scale
+                
+                # Basis matrix B: R^D x k (D = in_channels, k = residual_rank)
+                self.B = nn.Parameter(torch.randn(in_channels, residual_rank))
+                nn.init.orthogonal_(self.B)
+                
+                # Temperature annealing for coefficient computation
+                self.tau_init = config['arch']['phys_vae'].get('tau_init', 3.0)  # Initial temperature
+                self.tau_final = config['arch']['phys_vae'].get('tau_final', 1.0)  # Final temperature
+                self.tau_warmup_epochs = config['arch']['phys_vae'].get('tau_warmup_epochs', 20)
+                
+                # Global residual scale warmup
+                self.r_init = config['arch']['phys_vae'].get('r_init', 0.0)
+                self.r_final = config['arch']['phys_vae'].get('r_final', 1.0)
+                self.r_warmup_epochs = config['arch']['phys_vae'].get('r_warmup_epochs', 20)
+                
+                # Orthogonality penalty weight
+                self.ortho_penalty_weight = config['arch']['phys_vae'].get('ortho_penalty_weight', 0.1)
         else:
             # no phy
             self.func_aux_dec = MLP([dim_z_aux, 16, 32, 64, in_channels], activation)
 
-    def _init_gate_bias(self):
-        """Initialize gate bias to start with low gate values (~0.01)"""
-        try:
-            # Find the last linear layer in the gate network
-            for module in reversed(list(self.func_gate.modules())):
-                if isinstance(module, nn.Linear):
-                    if module.bias is not None:
-                        # Initialize bias to -4.6 so sigmoid(-4.6) ≈ 0.01
-                        nn.init.constant_(module.bias, -4.6)
-                    break
-        except Exception as e:
-            print(f"Warning: Could not initialize gate bias: {e}")
-            pass
+    def get_tau(self, epoch, epochs_pretrain):
+        """Get current temperature for annealing (starts after pretraining)"""
+        if epoch < epochs_pretrain:
+            return self.tau_init  # Keep initial temperature during pretraining
+        elif epoch < epochs_pretrain + self.tau_warmup_epochs:
+            progress = (epoch - epochs_pretrain) / self.tau_warmup_epochs
+            return self.tau_init + progress * (self.tau_final - self.tau_init)
+        return self.tau_final
+    
+    def get_r(self, epoch, epochs_pretrain):
+        """Get current global residual scale (starts after pretraining)"""
+        if epoch < epochs_pretrain:
+            return self.r_init  # Keep initial scale during pretraining
+        elif epoch < epochs_pretrain + self.r_warmup_epochs:
+            progress = (epoch - epochs_pretrain) / self.r_warmup_epochs
+            return self.r_init + progress * (self.r_final - self.r_init)
+        return self.r_final
+    
+    def compute_coefficient(self, z_aux, x_P_det, epoch, epochs_pretrain):
+        """
+        IMPROVED: Compute coefficient from [z_aux, x_P_det] with temperature annealing
+        c_raw = Linear([z_aux, x_P_det])
+        c = tanh(c_raw / tau)
+        """
+        # Concatenate z_aux and physics context
+        coeff_input = torch.cat([z_aux, x_P_det], dim=1)
+        c_raw = self.coeff(coeff_input)  # (batch_size, residual_rank)
+        
+        # Apply temperature annealing (starts after pretraining)
+        tau = self.get_tau(epoch, epochs_pretrain)
+        c = torch.tanh(c_raw / tau)  # (batch_size, residual_rank)
+        return c
+    
+    def orthogonality_penalty(self):
+        """Compute orthogonality penalty for basis matrix B"""
+        BtB = torch.matmul(self.B.T, self.B)
+        I = torch.eye(self.B.shape[1], device=self.B.device)
+        return torch.norm(BtB - I, p='fro') ** 2
 
 class FeatureExtractor(nn.Module):
     def __init__(self, config:dict):
@@ -260,7 +304,7 @@ class PHYS_VAE_SMPL(nn.Module):
 
     def encode(self, x:torch.Tensor):
         """
-        CHANGED: no unmixing — infer u_phy directly from shared features.
+        CHANGED: z_aux encoding from feature only (as before).
         """
         x_ = x
         n = x_.shape[0]
@@ -268,7 +312,7 @@ class PHYS_VAE_SMPL(nn.Module):
 
         feature = self.enc.func_feat(x_)
 
-        # infer z_aux
+        # infer z_aux from feature only
         if self.dim_z_aux > 0:
             z_aux_stat = {'mean': self.enc.func_z_aux_mean(feature),
                           'lnvar': self.enc.func_z_aux_lnvar(feature)}
@@ -289,10 +333,11 @@ class PHYS_VAE_SMPL(nn.Module):
     def draw(self, z_phy_stat:dict, z_aux_stat:dict, hard_z:bool=False):
         """
         Sample in u-space, then squash to z in (0,1).
+        z_aux remains in u-space (unbounded) for coefficient computation.
         """
         if not hard_z:
             u_phy = draw_normal(z_phy_stat['mean'], z_phy_stat['lnvar'])
-            z_aux = draw_normal(z_aux_stat['mean'], z_aux_stat['lnvar'])
+            z_aux = draw_normal(z_aux_stat['mean'], z_aux_stat['lnvar'])  # Keep in u-space
         else:
             u_phy = z_phy_stat['mean'].clone()
             z_aux = z_aux_stat['mean'].clone()
@@ -302,25 +347,30 @@ class PHYS_VAE_SMPL(nn.Module):
         else:
             z_phy = torch.zeros(u_phy.shape[0], self.in_channels, device=u_phy.device)
 
-        return z_phy, z_aux
+        return z_phy, z_aux  # Return z_aux (unbounded) instead of z_aux
 
-    def decode(self, z_phy:torch.Tensor, z_aux:torch.Tensor, full:bool=False, const:dict=None):
+    def decode(self, z_phy:torch.Tensor, z_aux:torch.Tensor, epoch:int=0, epochs_pretrain:int=20, full:bool=False, const:dict=None):
         """
-        CHANGED: explicit additive residual with gate.
-                 Inputs to corr & gate: concat([x_P, expanded]), where expanded depends on [z_phy, z_aux].
+        CORRECTED: z_aux (unbounded) -> c = tanh(z_aux/tau) -> delta = c@B.T
+        x_PB = x_P + r(t) * delta
         """
         if not self.no_phy:
             y = self.physics_model(z_phy, const=const) # (n, in_channels)
             x_P = y
             if self.dim_z_aux >= 0:
-                context = self.dec.func_context(torch.cat([z_phy.detach(), z_aux], dim=1))  # CHANGED: detach z_phy
-                h = torch.cat([x_P, context], dim=1)
-                delta = self.dec.func_residual(h)
-                gate = torch.sigmoid(self.dec.func_gate(h))
-                x_PB = x_P + gate * delta  # CHANGED: additive, gated
+                # Compute coefficient from z_aux with temperature annealing
+                c = self.dec.compute_coefficient(z_aux, x_P.detach(), epoch, epochs_pretrain)
+                
+                # Compute low-rank residual: delta = (c * s) @ B.T
+                delta = torch.matmul(c * self.dec.s, self.dec.B.T)
+                
+                # Apply global residual scale warmup (starts after pretraining)
+                r = self.dec.get_r(epoch, epochs_pretrain)
+                x_PB = x_P + r * delta
             else:
                 x_PB = x_P.clone()
-                gate = torch.zeros_like(x_P)
+                delta = torch.zeros_like(x_P)
+                c = torch.zeros(x_P.shape[0], 0, device=x_P.device)
         else:
             y = torch.zeros(z_phy.shape[0], self.in_channels, device=z_phy.device)
             if self.dim_z_aux >= 0:
@@ -328,25 +378,26 @@ class PHYS_VAE_SMPL(nn.Module):
             else:
                x_PB = torch.zeros(z_phy.shape[0], self.in_channels, device=z_phy.device)
             x_P = x_PB.clone()
-            gate = torch.zeros_like(x_PB)
+            delta = torch.zeros_like(x_PB)
+            c = torch.zeros(x_P.shape[0], 0, device=x_P.device)
 
         if full:
-            return x_PB, x_P, y, gate  # CHANGED: return gate for logging/penalty
+            return x_PB, x_P, y, delta, c
         else:
             return x_PB
 
     def forward(self, x:torch.Tensor, reconstruct:bool=True, hard_z:bool=False,
-                inference:bool=False, const:dict=None):
-        # CHANGED: encode returns only two dicts now
+                inference:bool=False, const:dict=None, epoch:int=0, epochs_pretrain:int=20):
         z_phy_stat, z_aux_stat = self.encode(x)
 
         if not reconstruct:
             return z_phy_stat, z_aux_stat
         
         if not inference:
-            x_mean = self.decode(*self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z), full=False, const=const)
+            x_mean = self.decode(*self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z), 
+                               epoch=epoch, epochs_pretrain=epochs_pretrain, full=False, const=const)
             return z_phy_stat, z_aux_stat, x_mean
         else:
             z_phy, z_aux = self.draw(z_phy_stat, z_aux_stat, hard_z=hard_z)
-            x_PB, x_P, _y, _gate = self.decode(z_phy, z_aux, full=True, const=const)
+            x_PB, x_P, _y, _delta, _c = self.decode(z_phy, z_aux, epoch=epoch, epochs_pretrain=epochs_pretrain, full=True, const=const)
             return z_phy, z_aux, x_PB, x_P  # keep 4-tuple for existing test code
