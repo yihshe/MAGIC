@@ -131,3 +131,7 @@ physics/dpm/
 .vscode/
 .idea/
 __MACOSX/
+
+rebuttal/figures/
+rebuttal/logs/
+data/processed/mogi_synth/

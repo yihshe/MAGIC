@@ -65,7 +65,8 @@ def main(config, args: argparse.Namespace):
     # build model architecture
     # model = config.init_obj('arch', module_arch)
     # model = model_init(config)
-    model = PHYS_VAE_SMPL(config.config)
+    base_model = PHYS_VAE_SMPL(config.config)
+    model: torch.nn.Module = base_model
     logger.info(model)
 
     # get function handles of loss and metrics
@@ -86,7 +87,7 @@ def main(config, args: argparse.Namespace):
     # Load tau/r values for inference if available
     tau_r_values = checkpoint.get('tau_r_values', None)
     if tau_r_values is not None and not no_phy:
-        model.dec.set_tau_r_from_checkpoint(tau_r_values)
+        base_model.dec.set_tau_r_from_checkpoint(tau_r_values)
         logger.info(f"Loaded tau/r values from checkpoint: tau={tau_r_values['tau']:.3f}, r={tau_r_values['r']:.3f}")
     else:
         logger.info("Using default tau/r values for inference")
@@ -168,7 +169,7 @@ def main(config, args: argparse.Namespace):
             latent_phy, latent_aux, x_PB, x_P = model(data, t=time_feats, inference=True, hard_z_phy=hard_z_phy, hard_z_aux=hard_z_aux, const=input_const)
 
             if not no_phy:
-                latent_phy = model.physics_model.rescale(latent_phy)
+                latent_phy = base_model.physics_model.rescale(latent_phy)
                 latent = torch.stack([latent_phy[k] for k in latent_phy.keys()], dim=1)
                 bias = None
                 if dim_z_aux > 0:  # Only include residual components when auxiliary latent variables exist
