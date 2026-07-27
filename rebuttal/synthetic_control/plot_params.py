@@ -18,10 +18,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))     # rebuttal/synthetic_control
+REPO = os.path.dirname(os.path.dirname(HERE))         # repo root
 SAVED = os.path.join(REPO, "saved/mogi_synth")
 DATA = os.path.join(REPO, "data/processed/mogi_synth")
-FIG = os.path.join(REPO, "rebuttal/figures")
+FIG = os.path.join(HERE, "figures")
 K_LIST = [1, 2, 4]
 RANK_LIST = [0, 1, 2, 4, 6, 8]
 # (analyzer column, scale to physical, label, ground-truth column or constant)

@@ -14,10 +14,11 @@ import os
 import json
 import copy
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))     # rebuttal/synthetic_control
+REPO = os.path.dirname(os.path.dirname(HERE))         # repo root
 TEMPLATE = os.path.join(
     REPO, "saved/mogi/PHYS_VAE_MOGI_C_SMPL/1016_191930_rank4/models/config.json")
-OUT_DIR = os.path.join(REPO, "rebuttal/configs")
+OUT_DIR = os.path.join(HERE, "configs")
 
 K_LIST = [1, 2, 4]              # intrinsic bias rank of the dataset
 RANK_LIST = [0, 1, 2, 4, 6, 8]  # model residual rank

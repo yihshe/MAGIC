@@ -1,13 +1,16 @@
 #!/bin/bash
 # Rank-sweep runner for the synthetic-control experiment (CLEAN datasets K1,K2,K4).
 # For each config: train PILA, then run the test/analyzer step. Continues on failure.
-# Progress -> rebuttal/logs/sweep_progress.log ; per-run logs -> rebuttal/logs/<name>_{train,test}.log
-cd "$(dirname "$0")/.." || exit 1
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-mkdir -p rebuttal/logs
-PROG=rebuttal/logs/sweep_progress.log   # appended, so resumes keep their history
+# Resumable: skips runs that already produced a test analyzer CSV.
+# Progress -> <this dir>/logs/sweep_progress.log ; per-run logs -> <this dir>/logs/<name>_{train,test}.log
+HERE="$(cd "$(dirname "$0")" && pwd)"        # rebuttal/synthetic_control
+REPO="$(cd "$HERE/../.." && pwd)"            # repo root
+cd "$REPO" || exit 1
+export PYTHONPATH="${PYTHONPATH}:$REPO"
+mkdir -p "$HERE/logs"
+PROG="$HERE/logs/sweep_progress.log"         # appended, so resumes keep their history
 
-CONFIGS=$(ls rebuttal/configs/SYN_K*_r*.json | sort)
+CONFIGS=$(ls "$HERE"/configs/SYN_K*_r*.json | sort)
 n=$(echo "$CONFIGS" | wc -l)
 i=0
 echo "[SWEEP START] $(date +%F_%H:%M:%S) — $n runs" >> "$PROG"
@@ -20,17 +23,17 @@ for cfg in $CONFIGS; do
     continue
   fi
   echo "[start $i/$n] $name $(date +%H:%M:%S)" >> "$PROG"
-  if conda run -n mres python train_pila.py --config "$cfg" > "rebuttal/logs/${name}_train.log" 2>&1; then
+  if conda run -n mres python train_pila.py --config "$cfg" > "$HERE/logs/${name}_train.log" 2>&1; then
     rundir=$(ls -td saved/mogi_synth/$name/*/ 2>/dev/null | head -1)
     if conda run -n mres python test_pila_mogi.py \
          --config "${rundir}models/config.json" \
-         --resume "${rundir}models/model_best.pth" > "rebuttal/logs/${name}_test.log" 2>&1; then
+         --resume "${rundir}models/model_best.pth" > "$HERE/logs/${name}_test.log" 2>&1; then
       echo "[done $i/$n] $name $(date +%H:%M:%S) -> $rundir" >> "$PROG"
     else
-      echo "[test-FAIL $i/$n] $name — see rebuttal/logs/${name}_test.log" >> "$PROG"
+      echo "[test-FAIL $i/$n] $name — see $HERE/logs/${name}_test.log" >> "$PROG"
     fi
   else
-    echo "[train-FAIL $i/$n] $name — see rebuttal/logs/${name}_train.log" >> "$PROG"
+    echo "[train-FAIL $i/$n] $name — see $HERE/logs/${name}_train.log" >> "$PROG"
   fi
 done
 echo "[SWEEP DONE] $(date +%F_%H:%M:%S)" >> "$PROG"

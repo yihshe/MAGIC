@@ -132,6 +132,7 @@ physics/dpm/
 .idea/
 __MACOSX/
 
-rebuttal/figures/
-rebuttal/logs/
+rebuttal/synthetic_control/figures/
+rebuttal/synthetic_control/logs/
 data/processed/mogi_synth/
+.claude/

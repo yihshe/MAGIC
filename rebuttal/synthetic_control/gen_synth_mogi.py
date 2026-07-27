@@ -56,7 +56,8 @@ import datetime
 import numpy as np
 import torch
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))     # rebuttal/synthetic_control
+REPO = os.path.dirname(os.path.dirname(HERE))         # repo root
 sys.path.insert(0, REPO)
 from physics.mogi.mogi import Mogi  # noqa: E402
 

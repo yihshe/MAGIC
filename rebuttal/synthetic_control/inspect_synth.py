@@ -15,9 +15,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))     # rebuttal/synthetic_control
+REPO = os.path.dirname(os.path.dirname(HERE))         # repo root
 ROOT = os.path.join(REPO, "data/processed/mogi_synth")
-FIG_DIR = os.path.join(REPO, "rebuttal/figures")
+FIG_DIR = os.path.join(HERE, "figures")
 RANKS = [1, 2, 4]
 STATIONS = list(json.load(open(os.path.join(REPO, "configs/station_info.json"))).keys())
 GPS = [f"{d}_{s}" for d in ("ux", "uy", "uz") for s in STATIONS]
