@@ -33,10 +33,10 @@ CFG=rebuttal/greenhyperspectra/configs
 # ~1.0 h (PILA) and ~1.2 h (HVAE) for 150 epochs.
 
 # PILA (our method)
-$PYTHON train_pila.py --config $CFG/PILA_PROSAIL_C_ghs.json
+# $PYTHON train_pila.py --config $CFG/PILA_PROSAIL_C_ghs.json
 
 # HVAE (baseline)
-# $PYTHON train_hvae.py --config $CFG/HVAE_PROSAIL_C_ghs.json
+$PYTHON train_hvae.py --config $CFG/HVAE_PROSAIL_C_ghs.json
 
 # -------------------- 3b. quick debug runs --------------------
 # Two epochs each, wandb disabled, to check the pipeline end to end.
