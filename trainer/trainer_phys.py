@@ -60,6 +60,12 @@ class PhysVAETrainer(BaseTrainer):
             self.input_const_keys = None
         # define a flag to indicate whether to stablize the gradient or not
         self.stablize_grad = config['trainer']['stablize_grad']
+
+        # Reconstruction loss is summed over the feature axis, so its magnitude
+        # scales with the number of channels (11 S2 bands vs 1721 hyperspectral
+        # ones). Scaling it here keeps every other loss weight transferable
+        # instead of re-tuning them per dataset. Default 1.0 = unchanged.
+        self.rec_loss_scale = config['trainer'].get('rec_loss_scale', 1.0)
         self.stablize_count = 0
 
     def _train_epoch(self, epoch):
@@ -229,7 +235,7 @@ class PhysVAETrainer(BaseTrainer):
         :return: Reconstruction loss and KL divergence loss.
         """
         n = data.shape[0]
-        rec_loss = torch.sum((x-data).pow(2), dim=1).mean()
+        rec_loss = torch.sum((x-data).pow(2), dim=1).mean() * self.rec_loss_scale
         prior_z_phy_stat, prior_z_aux2_stat = self.model.priors(n, self.device) #TODO
 
         KL_z_phy = kldiv_normal_normal(z_phy_stat['mean'], z_phy_stat['lnvar'],

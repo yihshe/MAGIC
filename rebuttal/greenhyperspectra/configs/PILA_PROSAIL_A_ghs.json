@@ -1,0 +1,115 @@
+{
+    "name": "PILA_PROSAIL_A_GHS",
+    "n_gpu": 0,
+    "arch": {
+        "type": "PHYS_VAE_SMPL",
+        "args": {
+            "physics": "PROSAIL",
+            "input_dim": 1721,
+            "hidden_dim": 7,
+            "rtm_paras": "rebuttal/greenhyperspectra/data/ghs_prosail_paras.json",
+            "standardization": {
+                "x_mean": "rebuttal/greenhyperspectra/data/train_x_mean.npy",
+                "x_scale": "rebuttal/greenhyperspectra/data/train_x_scale.npy"
+            }
+        },
+        "phys_vae": {
+            "no_phy": true,
+            "dim_z_aux": 11,
+            "dim_z_phy": 0,
+            "activation": "elu",
+            "num_units_feat": 128,
+            "hidlayers_feat": [
+                512,
+                256
+            ],
+            "hidlayers_z_aux": [
+                128
+            ],
+            "hidlayers_z_phy": [
+                128
+            ],
+            "hidlayers_aux_dec": [
+                128,
+                256,
+                512
+            ],
+            "residual_rank": 4,
+            "tau_init": 3.0,
+            "tau_final": 1.0,
+            "tau_warmup_epochs": 20,
+            "r_init": 0.0,
+            "r_final": 1.0,
+            "r_warmup_epochs": 30,
+            "detach_x_P_for_bias": true
+        }
+    },
+    "data_loader": {
+        "type": "SpectrumGHSDataLoader",
+        "args": {
+            "data_dir": "rebuttal/greenhyperspectra/data/train.npz",
+            "batch_size": 256,
+            "shuffle": true,
+            "validation_split": 0.0,
+            "num_workers": 2,
+            "with_const": false,
+            "augment": false
+        },
+        "data_dir_valid": "rebuttal/greenhyperspectra/data/valid.npz",
+        "data_dir_test": "rebuttal/greenhyperspectra/data/test.npz"
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 0.0003,
+            "weight_decay": 0.0001,
+            "amsgrad": true
+        }
+    },
+    "loss": "mse_loss",
+    "metrics": [],
+    "lr_scheduler": {
+        "type": "CosineAnnealingLR",
+        "args": {
+            "T_max": 150
+        }
+    },
+    "trainer": {
+        "epochs": 150,
+        "save_dir": "saved/greenhyperspectra",
+        "save_period": 10,
+        "log_step": 20,
+        "verbosity": 2,
+        "monitor": "min val_rec_loss",
+        "early_stop": 100,
+        "input_key": "spectrum",
+        "output_key": "spectrum",
+        "stablize_grad": true,
+        "grad_clip_norm": 1.0,
+        "rec_loss_scale": 0.006391632771644393,
+        "tensorboard": false,
+        "wandb": false,
+        "phys_vae": {
+            "epochs_pretrain": 0,
+            "kl_warmup_epochs": 50,
+            "balance_gate": 0.001,
+            "balance_data_aug": 1.0,
+            "balance_residual": 0.001,
+            "use_kl_term_z_phy": false,
+            "beta_max_z_phy": 1.0,
+            "use_kl_term_z_aux": false,
+            "beta_max_z_aux": 1.0,
+            "use_capacity_control": false,
+            "C_max": 7.0,
+            "C_gamma": 10.0,
+            "beta_aux": 1.0,
+            "ortho_penalty_weight": 0.1,
+            "coeff_penalty_weight": 0.0,
+            "delta_penalty_weight": 0.0,
+            "edge_penalty_weight": 0.0,
+            "edge_penalty_power": 1.0,
+            "use_ema_prior": false,
+            "ema_momentum": 0.999
+        }
+    }
+}

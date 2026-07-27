@@ -165,6 +165,15 @@ if __name__ == '__main__':
     print(f"  edge_penalty_power: {config.config['trainer']['phys_vae'].get('edge_penalty_power', 'NOT_SET')}")
     print(f"  detach_x_P_for_bias: {config.config['arch']['phys_vae'].get('detach_x_P_for_bias', 'NOT_SET')}")
 
+    # Optional per-run seed (used by the GreenHyperSpectra seed sweep). Absent
+    # or equal to SEED leaves the RNG state above untouched, so previously
+    # trained configs reproduce exactly.
+    run_seed = config.config.get('seed', SEED)
+    if run_seed != SEED:
+        torch.manual_seed(run_seed)
+        np.random.seed(run_seed)
+        print(f"Re-seeded with seed={run_seed}")
+
     wandb.init(
         project="PILA",
         name=f"{config['name']}",

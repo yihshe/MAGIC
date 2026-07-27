@@ -91,6 +91,15 @@ if __name__ == '__main__':
     ]
     config = ConfigParser.from_args(args, options)
 
+    # Optional per-run seed (used by the GreenHyperSpectra seed sweep). Absent
+    # or equal to SEED leaves the RNG state above untouched, so previously
+    # trained configs reproduce exactly.
+    run_seed = config.config.get('seed', SEED)
+    if run_seed != SEED:
+        torch.manual_seed(run_seed)
+        np.random.seed(run_seed)
+        print(f"Re-seeded with seed={run_seed}")
+
     # Initialize WandB
     wandb.init(
         project="HVAE",

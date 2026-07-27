@@ -1,0 +1,100 @@
+{
+    "name": "HVAE_PROSAIL_A_GHS",
+    "n_gpu": 0,
+    "arch": {
+        "type": "PHYS_VAE",
+        "args": {
+            "physics": "PROSAIL",
+            "input_dim": 1721,
+            "hidden_dim": 7,
+            "rtm_paras": "rebuttal/greenhyperspectra/data/ghs_prosail_paras.json",
+            "standardization": {
+                "x_mean": "rebuttal/greenhyperspectra/data/train_x_mean.npy",
+                "x_scale": "rebuttal/greenhyperspectra/data/train_x_scale.npy"
+            }
+        },
+        "phys_vae": {
+            "no_phy": true,
+            "dim_z_aux2": 11,
+            "dim_z_phy": 7,
+            "activation": "elu",
+            "hidlayers_feat": [
+                512,
+                256
+            ],
+            "num_units_feat": 128,
+            "hidlayers_aux2_enc": [
+                128
+            ],
+            "hidlayers_z_phy": [
+                128
+            ],
+            "hidlayers_aux2_expand": [
+                128,
+                256,
+                512
+            ],
+            "hidlayers_aux2_dec": [
+                128,
+                256,
+                512
+            ],
+            "aux2_map_hidden": 2048
+        }
+    },
+    "data_loader": {
+        "type": "SpectrumGHSDataLoader",
+        "args": {
+            "data_dir": "rebuttal/greenhyperspectra/data/train.npz",
+            "batch_size": 256,
+            "shuffle": true,
+            "validation_split": 0.0,
+            "num_workers": 2,
+            "with_const": false,
+            "augment": false
+        },
+        "data_dir_valid": "rebuttal/greenhyperspectra/data/valid.npz",
+        "data_dir_test": "rebuttal/greenhyperspectra/data/test.npz"
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 0.0003,
+            "weight_decay": 0.0001,
+            "amsgrad": true
+        }
+    },
+    "loss": "mse_loss",
+    "metrics": [],
+    "lr_scheduler": {
+        "type": "CosineAnnealingLR",
+        "args": {
+            "T_max": 150
+        }
+    },
+    "trainer": {
+        "epochs": 150,
+        "save_dir": "saved/greenhyperspectra",
+        "save_period": 10,
+        "log_step": 20,
+        "verbosity": 2,
+        "monitor": "min val_rec_loss",
+        "early_stop": 100,
+        "input_key": "spectrum",
+        "output_key": "spectrum",
+        "stablize_grad": true,
+        "grad_clip_norm": 1.0,
+        "rec_loss_scale": 0.006391632771644393,
+        "tensorboard": false,
+        "wandb": false,
+        "phys_vae": {
+            "epochs_pretrain": 0,
+            "x_lnvar": -9.0,
+            "balance_kld": 1.0,
+            "balance_lact_enc": 0.1,
+            "balance_unmix": 0.1,
+            "balance_data_aug": 0.1,
+            "balance_lact_dec": 0.1
+        }
+    }
+}

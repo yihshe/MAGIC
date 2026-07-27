@@ -64,8 +64,8 @@ class PhysVAETrainerSMPL(BaseTrainer):
         
         # NEW: Loss weights for improved residual architecture
         self.ortho_penalty_weight = config['trainer']['phys_vae'].get('ortho_penalty_weight', 0.1)
-        self.coeff_penalty_weight = config['trainer']['phys_vae'].get('coeff_penalty_weight', 1e-4)
-        self.delta_penalty_weight = config['trainer']['phys_vae'].get('delta_penalty_weight', 1e-4)
+        self.coeff_penalty_weight = config['trainer']['phys_vae'].get('coeff_penalty_weight', 1e-4) #TODO: double check
+        self.delta_penalty_weight = config['trainer']['phys_vae'].get('delta_penalty_weight', 1e-4) #TODO: double check
         
         # NEW: Edge penalty for z_phy to avoid extreme values (0, 1)
         self.edge_penalty_weight = config['trainer']['phys_vae'].get('edge_penalty_weight', 0.0)
@@ -79,6 +79,12 @@ class PhysVAETrainerSMPL(BaseTrainer):
 
         # NEW: gradient clipping
         self.grad_clip_norm = config['trainer'].get('grad_clip_norm', 1.0)
+
+        # Reconstruction loss is summed over the feature axis, so its magnitude
+        # scales with the number of channels (11 S2 bands vs 1721 hyperspectral
+        # ones). Scaling it here keeps every other loss weight transferable
+        # instead of re-tuning them per dataset. Default 1.0 = unchanged.
+        self.rec_loss_scale = config['trainer'].get('rec_loss_scale', 1.0)
 
         # trackers
         self.train_metrics = MetricTracker(
@@ -125,7 +131,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         
-        # NEW: Reset learning rate to initial value during pretraining
+        # NEW: Reset learning rate to initial value during pretraining. #TODO: this function can be further cleaned up since many components are not used in the final version.
         if epoch < self.epochs_pretrain:
             # Pretraining phase: use initial learning rate (no scheduling)
             if self.optimizer.param_groups[0]['lr'] != self.initial_lr:
@@ -259,7 +265,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
                             + self.temporal_smoothness_weight * temporal_smoothness)
                 else:
                     # --- ORIGINAL MODE ---
-                    # Original loss function with combined KL loss
+                    # Original loss function with combined KL loss (rec_loss, ortho_penalty, and edge_penalty are the only terms that are used in the final version of PILA)
                     loss = (rec_loss + 
                            kl_loss +
                            self.ortho_penalty_weight * ortho_penalty +
@@ -571,7 +577,7 @@ class PhysVAETrainerSMPL(BaseTrainer):
         """
         # Use the configured loss function for reconstruction loss
         # rec_loss = torch.sum((x - data).pow(2), dim=1).mean()
-        rec_loss = self.criterion(x, data)
+        rec_loss = self.criterion(x, data) * self.rec_loss_scale
 
         n = data.shape[0]
         prior_u_phy_stat, prior_z_aux_stat = self.model.priors(n, self.device)

@@ -36,9 +36,6 @@
             "r_init": 0.0,
             "r_final": 1.0,
             "r_warmup_epochs": 30,
-            "ortho_penalty_weight": 0.1,
-            "coeff_penalty_weight": 0.0001,
-            "delta_penalty_weight": 0.0001,
             "detach_x_P_for_bias": true
         }
     },
@@ -99,6 +96,9 @@
             "C_max": 7.0,
             "C_gamma": 10.0,
             "beta_aux": 1.0,
+            "ortho_penalty_weight": 0.1,
+            "coeff_penalty_weight": 0.0,
+            "delta_penalty_weight": 0.0,
             "edge_penalty_weight": 0.0,
             "edge_penalty_power": 1.0,
             "use_ema_prior": false,

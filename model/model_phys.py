@@ -63,15 +63,22 @@ class Decoders(nn.Module):
         
         self.register_buffer('param_x_lnvar', torch.ones(1)*x_lnvar)
 
+        # Widths are config-driven so the baseline can be sized to the input
+        # (11 S2 bands vs 1721 hyperspectral ones). Defaults reproduce the
+        # original architecture exactly.
+        hidlayers_aux2_expand = config['arch']['phys_vae'].get('hidlayers_aux2_expand', [32, 64])
+        hidlayers_aux2_dec = config['arch']['phys_vae'].get('hidlayers_aux2_dec', [16, 32, 64])
+        aux2_map_hidden = config['arch']['phys_vae'].get('aux2_map_hidden', 4 * in_channels)
+
         if not no_phy:
             if dim_z_aux2 >= 0:
                 # phy (and aux) -> x
-                self.func_aux2_expand = MLP([dim_z_phy+dim_z_aux2, 32, 64, in_channels], activation)
-                self.func_aux2_map = MLP([2 * in_channels, 4 * in_channels, in_channels], activation)            
+                self.func_aux2_expand = MLP([dim_z_phy+dim_z_aux2,]+hidlayers_aux2_expand+[in_channels,], activation)
+                self.func_aux2_map = MLP([2 * in_channels, aux2_map_hidden, in_channels], activation)
 
         else:
             # no phy
-            self.func_aux2_dec = MLP([dim_z_aux2, 16, 32, 64, in_channels], activation)
+            self.func_aux2_dec = MLP([dim_z_aux2,]+hidlayers_aux2_dec+[in_channels,], activation)
 
 class FeatureExtractor(nn.Module):
     def __init__(self, config:dict):
@@ -129,6 +136,64 @@ class Physics_RTM(nn.Module):
             z_phy_rescaled.update(const)
         output = self.model.run(**z_phy_rescaled)[:, self.bands_index]
         return (output - self.x_mean) / self.x_scale 
+
+class Physics_PROSAIL(nn.Module):
+    """
+    PROSPECT-PRO + 4SAIL over the 1721 GreenHyperSpectra bands.
+
+    Differs from Physics_RTM only in the RTM configuration (leaf model, canopy
+    model, no sensor resampling) and in how the latents map to RTM inputs:
+    PROSPECT-PRO is parameterised by (cp, cbc) and never takes cm, so cm is
+    derived as cp + cbc rather than inferred. That holds exactly in the GHS
+    labels and keeps both constituents positive by construction.
+    """
+    def __init__(self, config:dict):
+        super(Physics_PROSAIL, self).__init__()
+        self.model = RTM()
+        # 'default' sensor -> no SRF resampling, full 1 nm 400-2500 nm output
+        self.model.model_init(sensor='default', lop='prospectPro', canopy_arch='sail')
+        self.z_phy_ranges = json.load(open(os.path.join(PARENT_DIR, config['arch']['args']['rtm_paras']), 'r'))
+        # GHS keeps 400-1350, 1431-1800 and 2051-2450 nm; the RTM emits 400-2500
+        # nm at 1 nm, so band i corresponds to wavelength 400 + i.
+        self.bands_index = list(range(0, 951)) + list(range(1031, 1401)) + list(range(1651, 2051))
+        # Mean and scale for standardization
+        self.x_mean = torch.tensor(
+            np.load(os.path.join(PARENT_DIR, config['arch']['args']['standardization']['x_mean']))
+            ).float().unsqueeze(0).to(DEVICE)
+        self.x_scale = torch.tensor(
+            np.load(os.path.join(PARENT_DIR, config['arch']['args']['standardization']['x_scale']))
+            ).float().unsqueeze(0).to(DEVICE)
+
+    def rescale(self, z_phy:torch.Tensor):
+        """
+        Rescale z in (0,1) to physical parameters in original scales.
+        Also returns the derived cm so that evaluation code sees all 8 traits.
+        """
+        z_phy_rescaled = {}
+        for i, para_name in enumerate(self.z_phy_ranges.keys()):
+            z_phy_rescaled[para_name] = z_phy[:, i] * (
+                self.z_phy_ranges[para_name]['max'] - self.z_phy_ranges[para_name]['min']
+                ) + self.z_phy_ranges[para_name]['min']
+
+        # Dry matter is the sum of its two constituents (exact in the GHS labels).
+        z_phy_rescaled['cm'] = z_phy_rescaled['cp'] + z_phy_rescaled['cbc']
+
+        return z_phy_rescaled
+
+    def forward(self, z_phy:torch.Tensor, const:dict=None):
+        z_phy_rescaled = self.rescale(z_phy)
+        if const is not None:
+            z_phy_rescaled.update(const)
+        # cm is reported but not an input: PROSPECT-PRO consumes cp and cbc.
+        z_phy_rescaled.pop('cm', None)
+        # RTM.para_reset broadcasts the frozen parameters to the batch size of
+        # the first call only, which then caps every later batch. Re-arming the
+        # flag makes this physics module batch-size agnostic (it costs one
+        # torch.full per frozen parameter) so that training, validation and
+        # evaluation can use different batch sizes in any order.
+        self.model.reset_non_learnable = True
+        output = self.model.run(**z_phy_rescaled)[:, self.bands_index]
+        return (output - self.x_mean) / self.x_scale
 
 class Physics_Mogi(nn.Module):
     def __init__(self, config:dict):
@@ -202,6 +267,8 @@ class PHYS_VAE(nn.Module):
     def physics_init(self, config:dict):
         if config['arch']['args']['physics'] == 'RTM':
             return Physics_RTM(config)
+        elif config['arch']['args']['physics'] == 'PROSAIL':
+            return Physics_PROSAIL(config)
         elif config['arch']['args']['physics'] == 'Mogi':
             return Physics_Mogi(config)
         else:
