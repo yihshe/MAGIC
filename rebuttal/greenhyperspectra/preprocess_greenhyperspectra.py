@@ -6,7 +6,8 @@ that no later step depends on the HyspectraSSL project:
 
     train.npz / valid.npz / test.npz   standardized spectra + (sparse) traits
     train_x_mean.npy / train_x_scale.npy   per-band StandardScaler stats
-    ghs_prosail_paras.json             sigmoid ranges for the PROSAIL latents
+    ghs_prosail_paras.json             sigmoid ranges for the learnable latents
+    ghs_prosail_constants.json         fixed leaf parameters (car, anth)
     meta.json                          provenance and row counts
 
 Train pool = labeled_splits/train.csv + the first --n_splits shards of the
@@ -31,21 +32,43 @@ from sklearn.preprocessing import StandardScaler
 # The 8 GHS traits, in the column order used by the released CSVs.
 TRAITS = ['cab', 'cw', 'cm', 'LAI', 'cp', 'cbc', 'car', 'anth']
 
-# Free PROSPECT-PRO/4SAIL latents, in the order the encoder emits them.
+# Free PROSPECT-D/4SAIL latents, in the order the encoder emits them.
 #
-# `cm` is absent on purpose: PROSPECT-PRO takes (cp, cbc) and never cm, and the
-# labels satisfy cm == cp + cbc exactly, so cm is derived rather than inferred.
+# Only the four traits that carry the reconstruction. Measured by clamping each
+# latent to its training median and re-running the physics: LAI +171%, cbc +96%,
+# cw +78%, cab +22% -- against cp +2.8%, car +4.9%, anth +0.0%.
 #
-# `N` (leaf structure) is absent because GHS does not learn it either -- their
-# AE_RTM learns exactly 8 latents (cab, cw, cm, LAI, cp, cbc, car, anth) and
-# leaves N frozen at the RTM default of 1.5. Omitting it from this file means
-# nothing overwrites RTM.para_dict['N'], so it keeps that same default.
+# `cm` replaces the (cp, cbc) pair. PROSPECT-PRO resolves dry matter into
+# protein and carbon-based constituents, but that second degree of freedom is
+# not identifiable here: cos(K_cbc, K_cm) = 0.9986, and weighted by the observed
+# contents (cp is 9.4x scarcer than cbc) the unique protein signal is 4.7% of
+# the cbc-driven one. Its matched-filter SNR is 0.48, i.e. a full p10-p90 swing
+# in cp moves the spectrum half as much as the model's own residual. The labels
+# agree: cm == cp + cbc to 1e-7, so only two degrees of freedom are present.
+# PROSPECT-D takes cm directly, which also removes the negative-cbc NaN path in
+# the GHS implementation (they derive cbc = cm - cp).
 #
-# Net effect: 7 free latents here vs GHS's 8, but theirs includes cm, which is
-# immediately overwritten by their cm - cp constraint and excluded from their
-# supervised loss. Both models therefore carry the same 7 physical degrees of
-# freedom; this parameterization just has no dead dimension.
-Z_PARAS = ['cab', 'cw', 'LAI', 'cp', 'cbc', 'car', 'anth']
+# `car` and `anth` are fixed instead of inferred -- see FIXED below.
+#
+# `N` (leaf structure) is absent because GHS does not learn it either; omitting
+# it means nothing overwrites RTM.para_dict['N'], so it keeps the default 1.5.
+Z_PARAS = ['cab', 'cw', 'cm', 'LAI']
+
+# Non-retrievable leaf parameters, held at the (rounded) training-label median.
+#
+# Carotenoid and chlorophyll absorb almost the same way: their specific
+# absorption coefficients peak 4 nm apart (436 vs 440 nm) with cosine 0.776 over
+# 400-750 nm, and chlorophyll saturates the blue, so d(trans)/dk there is 0.081
+# against 0.306 at 550 nm. Left free, the car latent came out 0.755-correlated
+# with the inferred cab -- a chlorophyll shadow rather than a retrieval.
+# Anthocyanin is weaker still (0.22 vs car's 0.75 at peak) and 0.924-collinear
+# with cbrown, which is itself frozen. Neither is a defensible retrieval here;
+# GHS's own *semi-supervised* AE-RTM scores anth R2 = 0.335, its worst trait.
+#
+# Rounded from the train-label medians (car 7.97, anth 1.26), which the report
+# prints so the rounding stays auditable. Deliberately not the RTM defaults
+# (car 10, anth 2): those sit at the 76th and 93rd percentile of these labels.
+FIXED = {'car': 8.0, 'anth': 1.25}
 
 # Ranges hardcoded in the GHS code base (AE_RTM_architectures.py). These are the
 # min/max of the full labeled pool (train + test), except for cbc which is wrong
@@ -53,7 +76,7 @@ Z_PARAS = ['cab', 'cw', 'LAI', 'cp', 'cbc', 'car', 'anth']
 GHS_DECLARED = {
     'cab': (4.44830458, 229.4974769),          # ug/cm2
     'cw': (0.000048333333, 0.08062008166),     # cm
-    'cm': (0.0000136666667, 0.06638073277),    # g/cm2  (derived here, unused)
+    'cm': (0.0000136666667, 0.06638073277),    # g/cm2
     'LAI': (0.063333333, 8.77),                # m2/m2
     'cp': (3.1320099999999997e-06, 0.00420423377267),   # g/cm2
     'cbc': (0.001350791, 0.046180855),         # g/cm2
@@ -85,15 +108,13 @@ RANGE_OVERRIDES = {
 # a strictly positive floor, each verified against PROSAIL directly:
 #   LAI  - 4SAIL divides by ks*LAI, so LAI=0 is NaN in forward and backward.
 #          Keeps the 0.01 floor PILA already uses in configs/rtm_paras.json.
-#   cw   - with cw=0 AND cbc=0 there is no absorber left anywhere in the SWIR,
-#   cbc    and PROSPECT's plate model degenerates to NaN. Either one alone is
+#   cw   - with cw=0 AND cm=0 there is no absorber left anywhere in the SWIR,
+#   cm     and PROSPECT's plate model degenerates to NaN. Either one alone is
 #          safe; the pair is not, and HVAE reaches it because draw() clamps
 #          sampled latents to exactly [0, 1]. Floors sit just below the smallest
-#          observed label (cw 4.83e-5, cbc 1.05e-5).
-#   cp   - floored on the same grounds as cbc so the derived cm = cp + cbc is
-#          also strictly positive (smallest observed cp is 3.13e-6).
-FLOORS = {'cab': 0.0, 'cw': 0.00001, 'LAI': 0.01, 'cp': 0.000001,
-          'cbc': 0.00001, 'car': 0.0, 'anth': 0.0}
+#          observed label (cw 4.83e-5, cm 1.37e-5).
+FLOORS = {'cab': 0.0, 'cw': 0.00001, 'cm': 0.00001, 'LAI': 0.01,
+          'cp': 0.000001, 'cbc': 0.00001, 'car': 0.0, 'anth': 0.0}
 
 # Headroom above the largest observed label, so the data does not sit on the
 # sigmoid's upper end-stop. Rounded to clean decimals afterwards.
@@ -101,7 +122,8 @@ UPPER_PAD = 0.05
 
 # Decimals to round each upper bound to, chosen per magnitude so the published
 # ranges read like the ones in the GHS code base rather than padded floats.
-ROUND_TO = {'cab': 0, 'cw': 3, 'LAI': 1, 'cp': 4, 'cbc': 3, 'car': 0, 'anth': 1}
+ROUND_TO = {'cab': 0, 'cw': 3, 'cm': 3, 'LAI': 1, 'cp': 4, 'cbc': 3,
+            'car': 0, 'anth': 1}
 
 
 def band_columns(df):
@@ -143,16 +165,23 @@ def build_ranges(pool, report):
         report.append(f"  {name:5} {lo:12.6g} {hi:12.6g} | "
                       f"{z_lo:10.3f} {z_hi:10.3f} | {n_out}")
 
-    # cm is derived as cp + cbc; confirm the implied range covers observed cm.
-    cm_lo = ranges['cp']['min'] + ranges['cbc']['min']
-    cm_hi = ranges['cp']['max'] + ranges['cbc']['max']
-    cm_obs = pool['cm'].dropna()
-    n_out = int(((cm_obs < cm_lo) | (cm_obs > cm_hi)).sum())
-    report.append(f"  {'cm*':5} {cm_lo:12.6g} {cm_hi:12.6g} | "
-                  f"{(cm_obs.min() - cm_lo) / (cm_hi - cm_lo):10.3f} "
-                  f"{(cm_obs.max() - cm_lo) / (cm_hi - cm_lo):10.3f} | {n_out}"
-                  '   (* derived as cp + cbc, not a free latent)')
     return ranges, notes
+
+
+def build_constants(train_labels, report):
+    """Fixed leaf parameters, with the medians they were rounded from."""
+    report.append('')
+    report.append('Fixed (non-retrievable) leaf parameters:')
+    report.append(f"  {'para':5} {'value':>8} {'train median':>14} "
+                  f"{'RTM default':>12}   percentile of the fixed value")
+    for name, value in FIXED.items():
+        obs = train_labels[name].dropna()
+        pct = float((obs < value).mean() * 100)
+        default = {'car': 10, 'anth': 2}[name]
+        report.append(f'  {name:5} {value:8.4g} {obs.median():14.4g} '
+                      f'{default:12g}   {pct:.1f}%  (n={len(obs)})')
+    report.append('  N is not listed: it keeps the RTM default of 1.5, as in GHS.')
+    return dict(FIXED)
 
 
 def main():
@@ -272,6 +301,11 @@ def main():
     with open(os.path.join(args.out_dir, 'ghs_prosail_paras.json'), 'w') as f:
         json.dump(ranges, f, indent=4)
 
+    # --- fixed leaf parameters (medians taken from train labels only) -----
+    constants = build_constants(lb_train[TRAITS], report)
+    with open(os.path.join(args.out_dir, 'ghs_prosail_constants.json'), 'w') as f:
+        json.dump(constants, f, indent=4)
+
     # --- per-trait label coverage on the evaluation set -------------------
     report.append('')
     report.append('Test-set label coverage (n per trait, for NaN-aware eval):')
@@ -289,9 +323,10 @@ def main():
         'bands': bands,
         'traits': TRAITS,
         'z_paras': Z_PARAS,
-        'derived': {'cm': 'cp + cbc'},
-        'frozen': {'N': 1.5, 'tts': 30, 'tto': 0, 'psi': 0,
-                   'note': 'N is frozen at the RTM default, matching GHS AE_RTM'},
+        'leaf_model': 'prospectD',
+        'fixed': {**FIXED, 'N': 1.5, 'tts': 30, 'tto': 0, 'psi': 0,
+                  'note': 'car/anth held at rounded train medians; N, geometry '
+                          'at the RTM defaults, matching GHS AE_RTM'},
         'rows': {'train': int(tr_mask.sum()), 'valid': int(val_mask.sum()),
                  'test': int(len(X_test)),
                  'train_labeled': int((src[tr_mask] == 0).sum()),

@@ -34,11 +34,12 @@ documented follow-ups, not part of this experiment.
 |---|---|
 | `preprocess_greenhyperspectra.py` | reads the GHS release **once**, writes everything below |
 | `data/` | self-contained dataset; nothing here points at HyspectraSSL afterwards |
+| `data/ghs_prosail_paras.json` | sigmoid ranges for the four learnable latents |
+| `data/ghs_prosail_constants.json` | fixed leaf parameters (`car`, `anth`) |
 | `make_configs.py` | generates the configs so PILA/HVAE stay consistent |
 | `configs/` | `{PILA,HVAE}_PROSAIL_{A,B,C}_ghs.json` (C is the one that matters) |
-| `smoke_test.py` | builds every config, runs real steps, reports timing + loss balance |
-| `run_greenhyperspectra.sh` | launches the two C runs concurrently |
-| `eval_greenhyperspectra.py` | per-trait R²/RMSE/nRMSE + 1:1 density plots |
+| `run_greenhyperspectra.sh` | every step, commented out, debugger-friendly |
+| `eval_greenhyperspectra.py` | checkpoint → metrics, predictions CSV and 1:1 plots |
 | `compare_greenhyperspectra.py` | the headline PILA-vs-HVAE table |
 | `figures/`, `logs/` | outputs |
 
@@ -52,16 +53,13 @@ python rebuttal/greenhyperspectra/preprocess_greenhyperspectra.py \
 # 2. configs
 python rebuttal/greenhyperspectra/make_configs.py
 
-# 3. sanity check (~2 min)
-python rebuttal/greenhyperspectra/smoke_test.py
-
-# 4. train PILA-C and HVAE-C (~1.2 h wall-clock, both in parallel)
+# 3. train PILA-C and HVAE-C (~1.2 h wall-clock, both in parallel)
 ./rebuttal/greenhyperspectra/run_greenhyperspectra.sh
 
-# 5. the headline table (evaluates both checkpoints and diffs them)
+# 4. the headline table (evaluates both checkpoints and diffs them)
 python rebuttal/greenhyperspectra/compare_greenhyperspectra.py
 
-# ...or one checkpoint on its own, with the 1:1 density plots
+# ...or one checkpoint on its own
 python rebuttal/greenhyperspectra/eval_greenhyperspectra.py \
     -r saved/greenhyperspectra/PILA_PROSAIL_C_GHS/<run_id>/models/model_best.pth
 ```
@@ -91,37 +89,61 @@ from 736 (`cm`) down to 73 (`anth`), so every metric is reported with its own n.
 
 ## Physics
 
-PROSPECT-PRO + 4SAIL (`sensor='default'`, no SRF resampling) instead of INFORM.
+PROSPECT-D + 4SAIL (`sensor='default'`, no SRF resampling) instead of INFORM.
 PILA's `physics/rtm` already supports this, so `Physics_PROSAIL` differs from
-`Physics_RTM` only in `model_init` and the band slice — no new RTM code, and
-nothing is imported from HyspectraSSL.
+`Physics_RTM` only in `model_init`, the band slice and the fixed leaf
+parameters — no new RTM code, and nothing is imported from HyspectraSSL.
 
 Geometry is fixed (`tts=30, tto=0, psi=0`); GHS carries no per-sample angles.
 
 ### Latent parameterization
 
-Seven free latents, `[cab, cw, LAI, cp, cbc, car, anth]`, each a sigmoid
-rescaled to its range. **`cm` is derived as `cp + cbc`, not inferred**, because:
+**Four free latents, `[cab, cw, cm, LAI]`**, each a sigmoid rescaled linearly to
+its range. `car` and `anth` are held constant; `N` keeps the RTM default 1.5, as
+in GHS (their `AE_RTM` never touches it either).
 
-* PROSPECT-PRO is parameterised by `(cp, cbc)` and never takes `cm`;
-* the constraint holds *exactly* in the labels (`max |cm − (cp+cbc)| = 1e-7`
-  over the 2203 rows carrying all three).
+These four are exactly the ones carrying the reconstruction. Clamping each
+latent to its training median and re-running the physics costs:
 
-This removes the failure mode in GHS's own implementation, where `cbc = cm − cp`
-can go negative and drive PROSAIL to NaN, and it removes their dead latent
-dimension (their index 5 is both overwritten by the constraint and excluded from
-the supervised loss). Here both constituents are positive by construction, and
-`cm` still comes out for free as an evaluated trait.
+| latent | Δ physics-only RMSE | | latent | Δ |
+|---|---|---|---|---|
+| LAI | **+170.8%** | | car | +4.9% |
+| cbc→cm | **+96.3%** | | cp | +2.8% |
+| cw | **+78.3%** | | anth | +0.0% |
+| cab | **+22.2%** | | | |
 
-**`N` (leaf structure) is frozen at 1.5**, matching GHS: their `AE_RTM` learns
-exactly 8 latents (`cab, cw, cm, LAI, cp, cbc, car, anth`) and never touches `N`,
-which keeps the RTM's `para_init` default. Verified here by inspecting
-`para_dict['N']` after a forward pass (constant 1.5, `requires_grad=False`).
+**PROSPECT-D rather than PROSPECT-PRO.** PRO resolves dry matter into protein
+(`cp`) and carbon-based constituents (`cbc`), which is why GHS uses it. That
+second degree of freedom is not identifiable from fresh canopy spectra:
 
-So this parameterization has 7 free latents against GHS's 8 — but theirs includes
-`cm`, which is immediately overwritten by their `cm - cp` constraint *and*
-excluded from their supervised loss. Both carry the same **7 physical degrees of
-freedom**; this one simply has no dead dimension.
+* `cos(K_cbc, K_cm) = 0.9986` — cbc's coefficient is already PROSPECT-D's dry
+  matter. Half of `K_cp` is genuinely independent of `K_cbc`, but weighted by
+  observed content (protein is 9.4× scarcer, medians 7.31e-4 vs 6.888e-3 g/cm²)
+  the unique protein signal is **4.7%** of the cbc-driven one.
+* Matched-filter SNR for `cp` is **0.48** — a full p10–p90 swing moves the
+  spectrum half as much as the model's own residual.
+* In the labels `cm ≡ cp + cbc` to 1e-7 over 2203 rows, so only two degrees of
+  freedom are present regardless.
+* The amide features PRO relies on are masked by liquid water, and GHS deletes
+  1351–1430 and 1801–2050 nm, removing the 1940 nm band outright.
+
+PROSPECT-D takes `cm` directly, which also removes the failure mode in GHS's own
+implementation where `cbc = cm − cp` can go negative and drive PROSAIL to NaN.
+
+**`car` and `anth` are fixed** at the rounded train-label medians (8.0 µg/cm²
+and 1.25 µg/cm²) via `data/ghs_prosail_constants.json`. Carotenoid and
+chlorophyll absorb almost identically — specific absorption coefficients peaking
+4 nm apart (436 vs 440 nm), cosine 0.776 over 400–750 nm — and chlorophyll
+saturates the blue, so `d(trans)/dk` there is 0.081 against 0.306 at 550 nm.
+Left free, the `car` latent came out **0.755-correlated with the inferred `cab`**:
+a chlorophyll shadow, not a retrieval. Anthocyanin is weaker still (0.22 vs
+car's 0.75 at peak) and 0.924-collinear with `cbrown`, which is itself frozen;
+GHS's own *semi-supervised* AE-RTM scores anth R² = 0.335, its worst trait by a
+wide margin. Deliberately **not** the RTM defaults (`car=10`, `anth=2`), which
+sit at the 76th and 93rd percentile of these labels rather than the median.
+
+The claim this supports is narrow and stated as such: *chlorophyll is the only
+leaf pigment retrievable this way* — alongside water, dry matter and LAI.
 
 ### Ranges
 
@@ -131,12 +153,9 @@ Verified against the data, with these corrections:
 
 | trait | change | why |
 |---|---|---|
-| `cbc` | `[0.00135, 0.0462]` → `[1.05e-5, 0.0636]` | declared range excludes **159** pooled samples below its min and 8 above its max |
 | `cab` | max `229.5` → `120` | the max is a single *train* outlier; q99.9 = 98.3, test max = 78.1 |
-| `car` | max `40.4` → `30` | same, one train outlier; q99.9 = 20.5, test max = 19.6 |
-| `anth` | `[0.561, 2.98]` → `[0.05, 4.0]` | declared range comes from 289 rows of essentially one source dataset; binding the sigmoid that tightly is an unjustified prior |
 
-Both capped outliers live in `train`, not `test`, so evaluation is unaffected.
+The capped outlier lives in `train`, not `test`, so evaluation is unaffected.
 Each upper bound is then padded 5% above the largest observed label and rounded
 to clean decimals, so the data does not sit on the sigmoid's upper end-stop.
 Lower bounds are set to zero where that is physically meaningful and verified
@@ -145,11 +164,19 @@ NaN-free in PROSAIL, with three exceptions carrying small positive floors:
 | latent | floor | why |
 |---|---|---|
 | `LAI` | `0.01` | 4SAIL divides by `ks*LAI`; `LAI=0` is NaN forward and backward (PILA uses the same floor in `configs/rtm_paras.json`) |
-| `cw` | `1e-5` | `cw=0` *and* `cbc=0` together leave no SWIR absorber → PROSPECT degenerates to NaN |
-| `cbc` | `1e-5` | as above |
-| `cp` | `1e-6` | same grounds, and keeps the derived `cm = cp + cbc` strictly positive |
+| `cw` | `1e-5` | `cw=0` *and* `cm=0` together leave no SWIR absorber → PROSPECT degenerates to NaN |
+| `cm` | `1e-5` | as above |
 
-`data/report.txt` prints where every observed extreme lands in z-space.
+The mapping stays **linear** — `value = min + (max − min)·z`. A quantile warp
+would put z=0.5 on the training median instead of the range midpoint (which is
+1.3–4.9× the median, and is why the inferred traits skew high), but it would
+make the sigmoid carry a label-derived distributional prior. Left out
+deliberately: the only thing labels touch here is the min/max bounds. The
+consequence is that R² is penalised by a bias neither model can learn, so
+**Pearson r is reported alongside it**.
+
+`data/report.txt` prints where every observed extreme lands in z-space, and the
+percentile each fixed value sits at.
 
 ## Changes to the main tree
 
@@ -160,7 +187,7 @@ Austria and Mogi results are untouched.
 |---|---|
 | `datasets/spectrumGHS.py` | **new** `SpectrumGHS` dataset (npz; augmentation hook, off) |
 | `data_loader/data_loaders.py` | **new** `SpectrumGHSDataLoader` |
-| `model/model_phys_smpl.py` | **new** `Physics_PROSAIL`; `physics: "PROSAIL"`; `hidlayers_aux_dec` made config-driven |
+| `model/model_phys_smpl.py` | **new** `Physics_PROSAIL` (PROSPECT-D + 4SAIL, optional `rtm_constants`); `physics: "PROSAIL"`; `hidlayers_aux_dec` made config-driven |
 | `model/model_phys.py` | same, plus `hidlayers_aux2_expand` / `hidlayers_aux2_dec` / `aux2_map_hidden` made config-driven |
 | `trainer/trainer_phys_smpl.py`, `trainer/trainer_phys.py` | **new** `rec_loss_scale` (default `1.0` = unchanged) |
 | `train_pila.py`, `train_hvae.py` | optional `seed` config key; absent or `123` leaves the RNG untouched |

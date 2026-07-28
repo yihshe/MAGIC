@@ -1,15 +1,15 @@
 """
-Aggregate the GreenHyperSpectra variant-C runs into the headline table:
-PILA vs HVAE, per-trait R2 against measured ground truth, seed-averaged.
+The headline table: PILA vs HVAE, per-trait R2 against measured ground truth.
 
-Finds every matching run under saved/greenhyperspectra/, evaluates each
-checkpoint (or reuses cached metrics), and reports mean +- std across seeds
-together with the paired per-seed difference, which is the quantity the rebuttal
-claim rests on.
+Finds the variant-C runs under saved/greenhyperspectra/, reuses the metrics JSON
+that eval_greenhyperspectra.py wrote (running it only if missing), and prints the
+per-trait difference. Numbers only -- eval_greenhyperspectra.py draws the
+per-model 1:1 plots.
 
 Usage:
     python rebuttal/greenhyperspectra/compare_greenhyperspectra.py
     python rebuttal/greenhyperspectra/compare_greenhyperspectra.py --recompute
+    python rebuttal/greenhyperspectra/compare_greenhyperspectra.py --seeds 123 240 318
 """
 import argparse
 import glob
@@ -20,13 +20,11 @@ import sys
 
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from eval_greenhyperspectra import AE_RTM_SUPERVISED, TRAITS  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
-TRAITS = ['cab', 'cw', 'cm', 'LAI', 'cp', 'cbc', 'car', 'anth']
-# GHS's own AE-RTM, full-range, seed-averaged over 155/240/318, on the same
-# labeled_splits/test.csv. Semi-supervised, so an upper reference only.
-AE_RTM_SUPERVISED = {'cab': 0.674, 'cw': 0.738, 'cm': 0.738, 'LAI': 0.636,
-                     'cp': 0.727, 'cbc': 0.761, 'car': 0.657, 'anth': 0.335}
 
 
 def find_runs(fam, seeds):
@@ -34,9 +32,8 @@ def find_runs(fam, seeds):
     out = {}
     for seed in seeds:
         exp = f'{fam}_PROSAIL_C_GHS' if seed is None else f'{fam}_PROSAIL_C_GHS_s{seed}'
-        pat = os.path.join(ROOT, 'saved', 'greenhyperspectra', exp, '*',
-                           'models', 'model_best.pth')
-        hits = sorted(glob.glob(pat))
+        hits = sorted(glob.glob(os.path.join(
+            ROOT, 'saved', 'greenhyperspectra', exp, '*', 'models', 'model_best.pth')))
         if hits:
             out[seed] = hits[-1]
     return out
@@ -97,10 +94,9 @@ def main():
     for t in TRAITS:
         p = np.array([r2('PILA', s, t) for s in seeds], float)
         h = np.array([r2('HVAE', s, t) for s in seeds], float)
-        d = p - h
-        rows[t] = dict(pila=p, hvae=h, diff=d)
+        rows[t] = dict(pila=p, hvae=h, diff=p - h)
         n = data['PILA'][seeds[0]]['traits'][t]['n']
-        print(f"{t:6}{n:>5}{fmt(p)}{fmt(h)}{np.nanmean(d):>+12.3f}"
+        print(f"{t:6}{n:>5}{fmt(p)}{fmt(h)}{np.nanmean(p - h):>+12.3f}"
               f"{AE_RTM_SUPERVISED[t]:>10.3f}")
 
     allp = np.array([[r2('PILA', s, t) for t in TRAITS] for s in seeds], float)
@@ -108,7 +104,7 @@ def main():
     print('-' * 78)
     print(f"{'mean':6}{'':>5}{fmt(np.nanmean(allp, 1))}{fmt(np.nanmean(allh, 1))}"
           f"{np.nanmean(allp) - np.nanmean(allh):>+12.3f}")
-    print('\n* AE-RTM is GHS\'s own semi-supervised model on the same test set:')
+    print("\n* AE-RTM is GHS's own semi-supervised model on the same test set:")
     print('  an upper reference, not a like-for-like baseline (it trains on labels).')
 
     wins = sum(1 for t in TRAITS if np.nanmean(rows[t]['diff']) > 0)
@@ -116,7 +112,7 @@ def main():
     if multi:
         sweeps = sum(1 for i, _ in enumerate(seeds)
                      if all(rows[t]['diff'][i] > 0 for t in TRAITS))
-        print(f'PILA better on all 8 traits in {sweeps}/{len(seeds)} seeds.')
+        print(f'PILA better on all {len(TRAITS)} traits in {sweeps}/{len(seeds)} seeds.')
 
     for fam in ('PILA', 'HVAE'):
         rec = [data[fam][s]['recon_rmse_standardized'] for s in seeds]

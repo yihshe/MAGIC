@@ -252,20 +252,35 @@ class Physics_RTM(nn.Module):
 
 class Physics_PROSAIL(nn.Module):
     """
-    PROSPECT-PRO + 4SAIL over the 1721 GreenHyperSpectra bands.
+    PROSPECT-D + 4SAIL over the 1721 GreenHyperSpectra bands.
 
     Differs from Physics_RTM only in the RTM configuration (leaf model, canopy
-    model, no sensor resampling) and in how the latents map to RTM inputs:
-    PROSPECT-PRO is parameterised by (cp, cbc) and never takes cm, so cm is
-    derived as cp + cbc rather than inferred. That holds exactly in the GHS
-    labels and keeps both constituents positive by construction.
+    model, no sensor resampling) and in that some leaf parameters are held
+    constant rather than inferred.
+
+    PROSPECT-D rather than PROSPECT-PRO: PRO resolves dry matter into protein
+    and carbon-based constituents, but that extra degree of freedom is not
+    identifiable from fresh canopy spectra. Its coefficients are near-collinear
+    (cos(K_cbc, K_cm) = 0.9986) and protein is ~9x scarcer than cbc, leaving a
+    ~5% perturbation; the GHS labels satisfy cm == cp + cbc to 1e-7, so only two
+    degrees of freedom are present in the first place. PROSPECT-D takes cm
+    directly.
+
+    `rtm_constants` (optional) pins RTM parameters that are present in the leaf
+    model but not retrievable -- here carotenoid and anthocyanin, whose
+    absorption is largely masked by chlorophyll. They are passed to RTM.run
+    alongside the learnable ones, so nothing in physics/rtm needs to change and
+    RTM.para_dict keeps its defaults for everything left unspecified (N = 1.5).
     """
     def __init__(self, config:dict):
         super(Physics_PROSAIL, self).__init__()
         self.model = RTM()
         # 'default' sensor -> no SRF resampling, full 1 nm 400-2500 nm output
-        self.model.model_init(sensor='default', lop='prospectPro', canopy_arch='sail')
+        self.model.model_init(sensor='default', lop='prospectD', canopy_arch='sail')
         self.z_phy_ranges = json.load(open(os.path.join(PARENT_DIR, config['arch']['args']['rtm_paras']), 'r'))
+        const_path = config['arch']['args'].get('rtm_constants', None)
+        self.rtm_constants = json.load(open(os.path.join(PARENT_DIR, const_path), 'r')) \
+            if const_path else {}
         # GHS keeps 400-1350, 1431-1800 and 2051-2450 nm; the RTM emits 400-2500
         # nm at 1 nm, so band i corresponds to wavelength 400 + i.
         self.bands_index = list(range(0, 951)) + list(range(1031, 1401)) + list(range(1651, 2051))
@@ -278,27 +293,26 @@ class Physics_PROSAIL(nn.Module):
             ).float().unsqueeze(0).to(DEVICE)
 
     def rescale(self, z_phy:torch.Tensor):
-        """
-        Rescale z in (0,1) to physical parameters in original scales.
-        Also returns the derived cm so that evaluation code sees all 8 traits.
-        """
+        """Rescale z in (0,1) to the learnable physical parameters."""
         z_phy_rescaled = {}
         for i, para_name in enumerate(self.z_phy_ranges.keys()):
             z_phy_rescaled[para_name] = z_phy[:, i] * (
                 self.z_phy_ranges[para_name]['max'] - self.z_phy_ranges[para_name]['min']
                 ) + self.z_phy_ranges[para_name]['min']
 
-        # Dry matter is the sum of its two constituents (exact in the GHS labels).
-        z_phy_rescaled['cm'] = z_phy_rescaled['cp'] + z_phy_rescaled['cbc']
-
         return z_phy_rescaled
 
     def forward(self, z_phy:torch.Tensor, const:dict=None):
         z_phy_rescaled = self.rescale(z_phy)
+        # Fixed leaf parameters, expanded to the batch so RTM.para_reset treats
+        # them like the learnable ones (it does para_dict.update(paras), so no
+        # change to physics/rtm is needed). Per-sample `const` wins if given.
+        for name, value in self.rtm_constants.items():
+            z_phy_rescaled[name] = torch.full(
+                (z_phy.shape[0],), float(value),
+                dtype=z_phy.dtype, device=z_phy.device)
         if const is not None:
             z_phy_rescaled.update(const)
-        # cm is reported but not an input: PROSPECT-PRO consumes cp and cbc.
-        z_phy_rescaled.pop('cm', None)
         # RTM.para_reset broadcasts the frozen parameters to the batch size of
         # the first call only, which then caps every later batch. Re-arming the
         # flag makes this physics module batch-size agnostic (it costs one

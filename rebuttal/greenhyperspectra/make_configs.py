@@ -20,7 +20,7 @@ OUT = os.path.join(HERE, 'configs')
 DATA = 'rebuttal/greenhyperspectra/data'
 
 INPUT_DIM = 1721      # retained GHS bands
-DIM_Z_PHY = 7         # cab, cw, LAI, cp, cbc, car, anth  (cm derived = cp + cbc; N frozen at 1.5 as in GHS)
+DIM_Z_PHY = 4         # cab, cw, cm, LAI  (car/anth fixed via rtm_constants; N at the RTM default 1.5)
 DIM_Z_AUX = 4         # auxiliary latents for variant C
 RESIDUAL_RANK = 4     # rank of the PILA low-rank correction
 
@@ -73,6 +73,7 @@ def common_arch():
         'input_dim': INPUT_DIM,
         'hidden_dim': DIM_Z_PHY,
         'rtm_paras': f'{DATA}/ghs_prosail_paras.json',
+        'rtm_constants': f'{DATA}/ghs_prosail_constants.json',
         'standardization': {
             'x_mean': f'{DATA}/train_x_mean.npy',
             'x_scale': f'{DATA}/train_x_scale.npy',

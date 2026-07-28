@@ -6,8 +6,9 @@
         "args": {
             "physics": "PROSAIL",
             "input_dim": 1721,
-            "hidden_dim": 7,
+            "hidden_dim": 4,
             "rtm_paras": "rebuttal/greenhyperspectra/data/ghs_prosail_paras.json",
+            "rtm_constants": "rebuttal/greenhyperspectra/data/ghs_prosail_constants.json",
             "standardization": {
                 "x_mean": "rebuttal/greenhyperspectra/data/train_x_mean.npy",
                 "x_scale": "rebuttal/greenhyperspectra/data/train_x_scale.npy"
@@ -16,7 +17,7 @@
         "phys_vae": {
             "no_phy": false,
             "dim_z_aux": 0,
-            "dim_z_phy": 7,
+            "dim_z_phy": 4,
             "activation": "elu",
             "num_units_feat": 128,
             "hidlayers_feat": [
@@ -41,6 +42,9 @@
             "r_init": 0.0,
             "r_final": 1.0,
             "r_warmup_epochs": 30,
+            "ortho_penalty_weight": 0.1,
+            "coeff_penalty_weight": 0.0,
+            "delta_penalty_weight": 0.0,
             "detach_x_P_for_bias": true
         }
     },
@@ -88,7 +92,7 @@
         "grad_clip_norm": 1.0,
         "rec_loss_scale": 0.006391632771644393,
         "tensorboard": false,
-        "wandb": false,
+        "wandb": true,
         "phys_vae": {
             "epochs_pretrain": 0,
             "kl_warmup_epochs": 50,
@@ -100,13 +104,10 @@
             "use_kl_term_z_aux": false,
             "beta_max_z_aux": 1.0,
             "use_capacity_control": false,
-            "C_max": 7.0,
+            "C_max": 4.0,
             "C_gamma": 10.0,
             "beta_aux": 1.0,
-            "ortho_penalty_weight": 0.1,
-            "coeff_penalty_weight": 0.0,
-            "delta_penalty_weight": 0.0,
-            "edge_penalty_weight": 1.0,
+            "edge_penalty_weight": 0.0,
             "edge_penalty_power": 1.0,
             "use_ema_prior": false,
             "ema_momentum": 0.999
