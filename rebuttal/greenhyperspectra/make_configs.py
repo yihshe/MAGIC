@@ -113,9 +113,11 @@ def pila_config(variant):
         'r_init': 0.0,
         'r_final': 1.0,
         'r_warmup_epochs': 30,
-        'ortho_penalty_weight': ORTHO_W,
-        'coeff_penalty_weight': 0.0,
-        'delta_penalty_weight': 0.0,
+        # The ortho/coeff/delta penalty weights are NOT here: they belong under
+        # trainer.phys_vae, which is where trainer_phys_smpl.py reads them
+        # (lines 66-68) and where they multiply the loss. Under arch.phys_vae
+        # the trainer falls back to its defaults -- coeff and delta to 1e-4 --
+        # so a configured 0.0 would be silently ignored.
         'detach_x_P_for_bias': True,
     }
     cfg = {
@@ -154,7 +156,15 @@ def pila_config(variant):
             'C_max': float(DIM_Z_PHY),
             'C_gamma': 10.0,
             'beta_aux': 1.0,
-            'edge_penalty_weight': 0.0,
+            'ortho_penalty_weight': ORTHO_W,
+            'coeff_penalty_weight': 0.0,
+            'delta_penalty_weight': 0.0,
+            # End-stop penalty on latents approaching 0 or 1. Matches
+            # PILA_RTM_{B,C}_{wytham,austria}, which use 1.0 for the physics
+            # variants and 0.0 for A (no_phy: there are no bounded latents to
+            # keep off the end-stops). The latent ranges are padded on the
+            # assumption that this is active.
+            'edge_penalty_weight': 0.0 if no_phy else 1.0,
             'edge_penalty_power': 1.0,
             'use_ema_prior': False,
             'ema_momentum': 0.999,
