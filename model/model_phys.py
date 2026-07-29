@@ -363,7 +363,7 @@ class PHYS_VAE(nn.Module):
         return z_phy_stat, z_aux2_stat, unmixed
 
 
-    def draw(self, z_phy_stat:dict, z_aux2_stat:dict, hard_z:bool=False):
+    def draw(self, z_phy_stat:dict, z_aux2_stat:dict, hard_z:bool=False, return_raw:bool=False):
         if not hard_z:
             z_phy = draw_normal(z_phy_stat['mean'], z_phy_stat['lnvar'])#TODO check lnvar and reparameterization
             z_aux2 = draw_normal(z_aux2_stat['mean'], z_aux2_stat['lnvar'])
@@ -371,10 +371,16 @@ class PHYS_VAE(nn.Module):
             z_phy = z_phy_stat['mean'].clone()
             z_aux2 = z_aux2_stat['mean'].clone()
 
+        z_phy_raw = z_phy  # [REBUTTAL ONLY] pre-clamp draw, used only by the end-stop penalty
+
         # cut infeasible regions
         if not self.no_phy:
             z_phy = torch.clamp(z_phy, 0, 1)
 
+        # [REBUTTAL ONLY] return_raw is opt-in (default False), so the decode path
+        # and every published caller behave exactly as before.
+        if return_raw:
+            return z_phy, z_aux2, z_phy_raw
         return z_phy, z_aux2
 
 

@@ -140,7 +140,8 @@ data/processed/mogi_synth/
 # GreenHyperSpectra rebuttal: bulk arrays are regenerable from
 # rebuttal/greenhyperspectra/preprocess_greenhyperspectra.py; the small
 # provenance files (meta.json, report.txt, ranges, scaler stats) stay tracked.
-rebuttal/greenhyperspectra/data/
-rebuttal/greenhyperspectra/logs/
-rebuttal/greenhyperspectra/figures/
+rebuttal/*/data/
+rebuttal/*/logs/
+rebuttal/*/figures/
+rebuttal/greenhyperspectra/figures_7traits/
 

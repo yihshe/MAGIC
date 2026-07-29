@@ -73,9 +73,14 @@ CFG = dict(
     # Fixed Mogi source (physical; within configs/mogi_paras.json ranges)
     xcen_km=2.0, ycen_km=0.0, d_km=5.0,
 
-    # Inflation ramp: dV(t) = dV_max * normalize(atan((t - onset)/width))
+    # Inflation ramp on a nonzero baseline: dV(t) = dV_base + transient(t),
+    # transient(t) = A * normalize(atan((t - onset)/width)). The baseline keeps
+    # the source always deforming so the geometry stays identifiable throughout
+    # (only the relative/transient change is scientifically meaningful). Set
+    # dV_base_frac=0 to recover a ramp starting from dV=0.
     ramp_onset_frac=0.40,         # onset (time shift) as fraction of timeline
     ramp_width_frac=0.06,         # transition width as fraction of timeline
+    dV_base_frac=2.0,             # baseline as a multiple of the transient amplitude
 
     # Target per-entry RMS magnitudes (mm), calibrated to real decomposition.
     vol_rms_mm=2.5,               # volcanic (Mogi) signal
@@ -198,16 +203,21 @@ def generate_for_K(K, cfg, out_suffix):
                          cfg["d_km"], np.ones(1), cfg["poisson_nu"])[0]
     m_hat = m_raw / np.linalg.norm(m_raw)
 
-    # inflation ramp dV(t) -> S_vol, scaled to target volcanic RMS
+    # transient inflation ramp on a nonzero baseline: dV(t) = dV_base + A*ramp(t).
+    # A is set so the TRANSIENT displacement RMS = vol_rms_mm (the meaningful
+    # signal, which is what survives standardization); dV_base keeps |dV| away
+    # from zero so the geometry stays identifiable even before/at onset.
     onset = cfg["ramp_onset_frac"] * N
     width = cfg["ramp_width_frac"] * N
     ramp = np.arctan((t - onset) / width)
-    ramp = (ramp - ramp.min()) / (ramp.max() - ramp.min())
-    S_vol_unit = mogi_forward(x_km, y_km, cfg["xcen_km"], cfg["ycen_km"],
-                              cfg["d_km"], ramp, cfg["poisson_nu"])
-    vol_scale = cfg["vol_rms_mm"] / np.sqrt(np.mean(S_vol_unit ** 2))
-    dV = ramp * vol_scale
-    S_vol = S_vol_unit * vol_scale
+    ramp = (ramp - ramp.min()) / (ramp.max() - ramp.min())        # transient shape [0,1]
+    S_trans_unit = mogi_forward(x_km, y_km, cfg["xcen_km"], cfg["ycen_km"],
+                                cfg["d_km"], ramp, cfg["poisson_nu"])
+    vol_scale = cfg["vol_rms_mm"] / np.sqrt(np.mean(S_trans_unit ** 2))
+    dV_base = cfg["dV_base_frac"] * vol_scale
+    dV = dV_base + ramp * vol_scale                               # absolute dV(t)
+    S_vol = mogi_forward(x_km, y_km, cfg["xcen_km"], cfg["ycen_km"],
+                         cfg["d_km"], dV, cfg["poisson_nu"])       # includes baseline
 
     # systematic bias of intrinsic rank K
     V = build_spatial_basis(m_hat, K, rng)
@@ -287,19 +297,23 @@ def generate_for_K(K, cfg, out_suffix):
                                       / np.sum(B_std ** 2)))
 
     noise_rms = float(np.sqrt(np.mean(E ** 2))) if np.any(E) else 0.0
+    # reference magnitude = TRANSIENT variation (what survives standardization and
+    # competes with the bias), not the baseline-inflated absolute volcanic signal.
+    vol_tr_rms = float(np.sqrt(np.mean((S_vol - S_vol.mean(0)) ** 2)))
     meta = dict(
         K_true=K, effective_rank=eff_rank,
         singular_values=svals[:min(8, len(svals))].tolist(),
         drivers=[DRIVERS[j][0] for j in range(K)],
         n_days=N, n_train=len(train_idx), n_valid=len(valid_idx), n_test=len(test_idx),
         ramp_onset_days=float(onset), ramp_width_days=float(width),
-        realized_vol_rms_mm=float(np.sqrt(np.mean(S_vol ** 2))),
+        realized_vol_transient_rms_mm=vol_tr_rms,
+        realized_vol_abs_rms_mm=float(np.sqrt(np.mean(S_vol ** 2))),
         realized_bias_rms_mm=float(np.sqrt(np.mean(B ** 2))),
         realized_noise_rms_mm=noise_rms,
-        bias_to_vol_ratio=float(np.sqrt(np.mean(B ** 2)) / np.sqrt(np.mean(S_vol ** 2))),
-        noise_to_vol_ratio=(noise_rms / np.sqrt(np.mean(S_vol ** 2))) if noise_rms else 0.0,
+        bias_to_vol_ratio=float(np.sqrt(np.mean(B ** 2)) / vol_tr_rms),
+        noise_to_vol_ratio=(noise_rms / vol_tr_rms) if noise_rms else 0.0,
         bias_phys_overlap_frac=bias_phys_overlap,
-        dV_max_m3=float(dV.max()),
+        dV_base_m3=float(dV_base), dV_min_m3=float(dV.min()), dV_max_m3=float(dV.max()),
         noise_white_mm=cfg["noise_white_mm"], noise_flicker_mm=cfg["noise_flicker_mm"],
         source_km=dict(xcen=cfg["xcen_km"], ycen=cfg["ycen_km"], d=cfg["d_km"]),
         split_mode=cfg["split_mode"], seed=cfg["seed"],
@@ -327,10 +341,10 @@ def main():
     for K in cfg["ranks"]:
         meta, out_dir = generate_for_K(K, cfg, suffix)
         print(f"  K={K}: rank={meta['effective_rank']} "
-              f"vol={meta['realized_vol_rms_mm']:.2f} bias={meta['realized_bias_rms_mm']:.2f} "
-              f"noise={meta['realized_noise_rms_mm']:.2f} mm | "
+              f"vol_tr={meta['realized_vol_transient_rms_mm']:.2f} "
+              f"bias={meta['realized_bias_rms_mm']:.2f} noise={meta['realized_noise_rms_mm']:.2f} mm | "
               f"bias/vol={meta['bias_to_vol_ratio']:.2f} noise/vol={meta['noise_to_vol_ratio']:.2f} "
-              f"bias||phys={meta['bias_phys_overlap_frac']:.3f} -> {out_dir}")
+              f"dV=[{meta['dV_min_m3']:.2e},{meta['dV_max_m3']:.2e}] -> {out_dir}")
     print("Done.")
 
 

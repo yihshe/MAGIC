@@ -61,6 +61,18 @@ class PhysVAETrainerSMPL(BaseTrainer):
 
         # for Stage A bootstrap in u-space
         self.synthetic_data_loss_weight = config['trainer']['phys_vae'].get('balance_data_aug', 1.0)
+
+        # === [REBUTTAL ONLY] not part of the published PILA runs ==============
+        # Reviewer Q: "Could PILA be improved through addition of a physical
+        # consistency loss as in HVAE?"  Keeps the HVAE-style synthetic-pair
+        # inversion loss ON during the main phase, instead of only during the
+        # Stage-A bootstrap. Configs under configs/ do not set this key, so it
+        # defaults to 0.0 and the term is never computed -> published runs are
+        # bit-identical. Used only by rebuttal/consistency_loss/configs/.
+        # Note: this loss lives in u-space over dim_z_phy latents, so unlike
+        # rec_loss its magnitude does not scale with the number of input bands.
+        self.syn_cotrain_weight = config['trainer']['phys_vae'].get('balance_data_aug_cotrain', 0.0)
+        # ======================================================================
         
         # NEW: Loss weights for improved residual architecture
         self.ortho_penalty_weight = config['trainer']['phys_vae'].get('ortho_penalty_weight', 0.1)
@@ -277,6 +289,14 @@ class PhysVAETrainerSMPL(BaseTrainer):
                     # Initialize capacity control variables for metrics (when not using capacity control)
                     C_t = 0.0
                     capacity_penalty = torch.tensor(0.0, device=data.device)
+
+                # [REBUTTAL ONLY] physical-consistency term; inactive (weight 0)
+                # for every config under configs/. Appended rather than folded
+                # into the expressions above so those runs stay bit-identical.
+                if self.syn_cotrain_weight > 0 and not self.no_phy:
+                    syn_cotrain_loss = self._synthetic_consistency_loss_z(data.shape[0])
+                    loss = loss + self.syn_cotrain_weight * syn_cotrain_loss
+                    self.train_metrics.update('syn_data_loss', syn_cotrain_loss.item())
 
             loss.backward()
 
@@ -625,6 +645,40 @@ class PhysVAETrainerSMPL(BaseTrainer):
             return torch.sum((inferred_u_phy - target_u).pow(2), dim=1).mean()
         else:
             return torch.zeros(1, device=self.device)
+
+    def _synthetic_consistency_loss_z(self, batch_size):
+        """
+        [REBUTTAL ONLY] HVAE's physical-consistency loss, compared in z-space.
+
+        Reviewer Q: "Could PILA be improved through addition of a physical
+        consistency loss as in HVAE?"  This mirrors HVAE's
+        PhysVAETrainer._synthetic_data_loss as closely as the two encoders allow:
+        sample z ~ U(0,1), simulate the physics-only signal, re-infer the
+        physical variables, and compare **in z-space**.
+
+        The only difference from HVAE is where the squashing happens. HVAE's
+        encoder head ends in Softplus and emits the physical value directly, so
+        it compares its output against z as-is. PILA's head emits u and the
+        sigmoid lives in `draw`, so the sigmoid is applied here to get the same
+        quantity. Both therefore compare the drawn z against the sampled z.
+
+        Not to be confused with _synthetic_data_loss above, which is the Stage-A
+        bootstrap and regresses u against logit(z); that one is untouched and is
+        what every published config would use (it is inactive at
+        epochs_pretrain = 0).
+        """
+        if self.no_phy:
+            return torch.zeros(1, device=self.device).squeeze()
+
+        self.model.eval()
+        with torch.no_grad():
+            z = torch.rand((batch_size, self.dim_z_phy), device=self.device)
+            synthetic_y = self.model.generate_physonly(z)  # physics-only signal
+        self.model.train()
+        synthetic_features = self.model.enc.func_feat(synthetic_y)
+        # u -> z, the same map draw() applies, so this is the drawn z
+        inferred_z_phy = torch.sigmoid(self.model.enc.func_z_phy_mean(synthetic_features))
+        return torch.sum((inferred_z_phy - z).pow(2), dim=1).mean()
 
     def _edge_penalty(self, z_phy):
         """

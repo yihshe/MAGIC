@@ -87,7 +87,7 @@
         "grad_clip_norm": 1.0,
         "rec_loss_scale": 0.006391632771644393,
         "tensorboard": false,
-        "wandb": true,
+        "wandb": false,
         "phys_vae": {
             "epochs_pretrain": 0,
             "x_lnvar": -9.0,
