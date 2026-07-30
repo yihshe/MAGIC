@@ -56,17 +56,25 @@ alternative if wanted.
 
 ## Commands
 
+`run_prior_vs_endstop.sh` is a menu, not a driver: every command in it is
+commented out. Open it and uncomment the step you want.
+
 ```bash
 python rebuttal/prior_vs_endstop/make_configs.py
-./rebuttal/prior_vs_endstop/run_prior_vs_endstop.sh          # ~1.5 h, single run
+python train_hvae.py --config rebuttal/prior_vs_endstop/configs/HVAE_PROSAIL_C_GHS_endstop.json
+python rebuttal/greenhyperspectra/eval_greenhyperspectra.py \
+    --resume saved/rebuttal/prior_vs_endstop/HVAE_PROSAIL_C_GHS_endstop/<run>/models/model_best.pth \
+    --out_dir rebuttal/prior_vs_endstop/figures
+python rebuttal/compare_ghs_variants.py \
+    --dir rebuttal/prior_vs_endstop/figures --baseline HVAE_PROSAIL_C_GHS
 ```
 
 Requires the GHS dataset built by
 `rebuttal/greenhyperspectra/preprocess_greenhyperspectra.py`. Each run is scored
 with `rebuttal/greenhyperspectra/eval_greenhyperspectra.py` into `figures/`
-(`*_metrics.json`, `*_preds.csv`, `*_scatter.png`). Resumable: variants whose
-metrics exist are skipped. A 2-epoch smoke config
-(`configs/_debug_*.json`) runs the whole path in ~2 min.
+(`*_metrics.json`, `*_preds.csv`, `*_scatter.png`). A 2-epoch smoke config
+(`configs/_debug_*.json`) runs the whole path in ~2 min. Long runs die with their
+parent shell — see the `setsid` note at the top of the script.
 
 ## Code changes
 

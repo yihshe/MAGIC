@@ -54,16 +54,25 @@ posed it.
 
 ## Commands
 
+`run_consistency_loss.sh` is a menu, not a driver: every command in it is
+commented out. Open it and uncomment the step you want.
+
 ```bash
 python rebuttal/consistency_loss/make_configs.py
-./rebuttal/consistency_loss/run_consistency_loss.sh          # ~1.5 h in parallel
-ONLY=S2 ./rebuttal/consistency_loss/run_consistency_loss.sh  # one weight
+python train_pila.py --config rebuttal/consistency_loss/configs/PILA_PROSAIL_C_GHS_S1_w0.1.json
+# ... S2_w1.0, S3_w10 likewise — ~1.7 h each, independent
+python rebuttal/greenhyperspectra/eval_greenhyperspectra.py \
+    --resume saved/rebuttal/consistency_loss/<name>/<run>/models/model_best.pth \
+    --out_dir rebuttal/consistency_loss/figures
+python rebuttal/compare_ghs_variants.py \
+    --dir rebuttal/consistency_loss/figures --baseline PILA_PROSAIL_C_GHS
 ```
 
 Requires the GHS dataset built by
 `rebuttal/greenhyperspectra/preprocess_greenhyperspectra.py`. Each run is scored
 with `rebuttal/greenhyperspectra/eval_greenhyperspectra.py` into `figures/`.
-Resumable. A 2-epoch smoke config (`configs/_debug_*.json`) runs the path in ~2 min.
+A 2-epoch smoke config (`configs/_debug_*.json`) runs the path in ~2 min. Long
+runs die with their parent shell — see the `setsid` note at the top of the script.
 
 ## Code changes
 

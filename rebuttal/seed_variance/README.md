@@ -30,20 +30,31 @@ also hardcodes `np.random.seed(0)` for the train/val split, but these configs us
 |---|---|
 | `make_configs.py` | copies the two published Austria configs, changing only `name`, `seed`, `trainer.save_dir` |
 | `configs/` | `{PILA,HVAE}_RTM_C_AUSTRIA_s{123,240,318}.json` |
-| `run_seed_variance.sh` | trains all six, then runs the test/analyzer step for each |
+| `run_seed_variance.sh` | the commands for every step, commented out — uncomment what you want |
 | `jm_seeds.py` | JM distances per run -> mean +- std, paired PILA-vs-HVAE comparison |
 | `figures/`, `logs/` | outputs |
 
 ## Commands
 
+`run_seed_variance.sh` is a menu, not a driver: every command in it is commented
+out. Open it and uncomment the step you want, or copy the line you need.
+
 ```bash
 python rebuttal/seed_variance/make_configs.py
-./rebuttal/seed_variance/run_seed_variance.sh      # ~2 h in parallel, ~12 h serial
-python rebuttal/seed_variance/jm_seeds.py
+
+# one line per run — ~2 h each, six of them, independent
+python train_pila.py --config rebuttal/seed_variance/configs/PILA_RTM_C_AUSTRIA_s240.json
+python train_hvae.py --config rebuttal/seed_variance/configs/HVAE_RTM_C_AUSTRIA_s240.json
+# ... s123, s318 likewise
+
+# then the analyzer CSV per checkpoint (test_pila_rtm.py / test_hvae_rtm.py),
+# then:
+python rebuttal/seed_variance/jm_seeds.py --space jm   # as plotted in Figure 8
+python rebuttal/seed_variance/jm_seeds.py --space b    # unsaturated
 ```
 
-`run_seed_variance.sh` is resumable — a run whose analyzer CSV already exists is
-skipped, so it can be re-invoked to fill in seeds added later.
+Long runs die with their parent shell — see the `setsid` note at the top of the
+script if you need one to survive a closed terminal.
 
 ## What `jm_seeds.py` reports
 

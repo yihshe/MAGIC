@@ -62,7 +62,7 @@ CFG=rebuttal/greenhyperspectra/configs
 #   --resume /maps/ys611/PILA/saved/greenhyperspectra/HVAE_PROSAIL_C_GHS/0728_224154/models/model_best.pth
 
 $PYTHON rebuttal/greenhyperspectra/eval_greenhyperspectra.py \
-  --resume /maps/ys611/PILA/saved/greenhyperspectra/PILA_PROSAIL_C_GHS/0729_090655/models/checkpoint-epoch80.pth
+  --resume /maps/ys611/PILA/saved/rebuttal/prior_vs_endstop/HVAE_PROSAIL_C_GHS_endstop/0729_162340/models/model_best.pth
 # both (cached unless --recompute), and prints the per-trait difference.
 # $PYTHON rebuttal/greenhyperspectra/compare_greenhyperspectra.py
 

@@ -98,7 +98,7 @@
             "ortho_penalty_weight": 0.1,
             "coeff_penalty_weight": 0.0,
             "delta_penalty_weight": 0.0,
-            "edge_penalty_weight": 1.0,
+            "edge_penalty_weight": 0.0,
             "edge_penalty_power": 1.0,
             "use_ema_prior": false,
             "ema_momentum": 0.999

@@ -1,62 +1,87 @@
 #!/bin/bash
-# Multi-seed Austria runs for the Figure-8 variance question (reviewer Q2).
+# Seed-variance experiment on the Austrian dataset (reviewer: "Figure 8 could be
+# anecdotal without multiple runs"). Same style as ../greenhyperspectra/
+# run_greenhyperspectra.sh: every command is commented out -- uncomment the one
+# you want to run.
 #
-# Trains PILA and HVAE on the Austrian dataset at three seeds, then runs the
-# test/analyzer step for each checkpoint so jm_seeds.py has its input CSVs.
+# Run from the repo root:   ./rebuttal/seed_variance/run_seed_variance.sh
+# Override the interpreter: PYTHON=python3 ./rebuttal/seed_variance/run_seed_variance.sh
 #
-# Run from anywhere:  ./rebuttal/seed_variance/run_seed_variance.sh
-# Serial instead of parallel:  PARALLEL=0 ./rebuttal/seed_variance/run_seed_variance.sh
+# PILA and HVAE at three seeds each, everything else identical to the paper runs.
+# ~2 h per run (150 epochs, 11 S2 bands, CPU). The six are independent: run them
+# from separate terminals, or append ' &' to launch several at once. 8 threads is
+# the sweet spot per run.
 #
-# All six runs are independent, so by default they are launched at once; this box
-# has 256 cores and each run is capped at 8 threads. Wall clock ~2 h for the whole
-# sweep in parallel (a single Austria run is ~2 h), ~12 h serial.
-# Resumable: a run whose analyzer CSV already exists is skipped.
-set -u
-HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
-cd "$REPO" || exit 1
-export PYTHONPATH="${PYTHONPATH:-}:$REPO"
+# NOTE ON LONG RUNS: a plain background job dies when its parent shell exits. To
+# survive a closed terminal, wrap the command:
+#   setsid nohup $PYTHON train_pila.py --config ... > train.log 2>&1 < /dev/null &
+set -e
+cd "$(dirname "$0")/../.." || exit 1
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
 export MKL_NUM_THREADS="${MKL_NUM_THREADS:-8}"
 
 PYTHON="${PYTHON:-python}"
-PARALLEL="${PARALLEL:-1}"
-mkdir -p "$HERE/logs"
-PROG="$HERE/logs/progress.log"
-SAVE_ROOT=saved/rebuttal/seed_variance
+CFG=rebuttal/seed_variance/configs
+SAVE=saved/rebuttal/seed_variance
 
-# Train, then test, one config. $1 = config path.
-run_one() {
-  local cfg="$1"
-  local name; name=$(basename "$cfg" .json)
-  local fam;  fam=${name%%_*}                       # PILA or HVAE
-  local train_script test_script
-  if [ "$fam" = "PILA" ]; then train_script=train_pila.py; test_script=test_pila_rtm.py
-  else                          train_script=train_hvae.py; test_script=test_hvae_rtm.py; fi
+# -------------------- 1. (re)generate the configs --------------------
+# Copies configs/phys_smpl/PILA_RTM_C_austria.json and configs/phys/
+# HVAE_RTM_C_austria.json, changing only name, seed and trainer.save_dir.
+# $PYTHON rebuttal/seed_variance/make_configs.py
 
-  if ls $SAVE_ROOT/$name/*/models/model_best_testset_analyzer.csv >/dev/null 2>&1; then
-    echo "[skip] $name (analyzer CSV already present)" >> "$PROG"; return 0
-  fi
+# -------------------- 2. train --------------------
+# Seed 123 is the seed hardcoded in the train scripts, i.e. the published run;
+# it is included so all three seeds come from one code state. Skip it if you
+# would rather reuse the existing checkpoint under saved/rtm/.
 
-  echo "[start] $name $(date +%F_%H:%M:%S)" >> "$PROG"
-  if ! $PYTHON "$train_script" --config "$cfg" > "$HERE/logs/${name}_train.log" 2>&1; then
-    echo "[train-FAIL] $name -- see logs/${name}_train.log" >> "$PROG"; return 1
-  fi
-  local rundir; rundir=$(ls -td $SAVE_ROOT/$name/*/ 2>/dev/null | head -1)
-  if ! $PYTHON "$test_script" --config "${rundir}models/config.json" \
-                              --resume "${rundir}models/model_best.pth" \
-                              > "$HERE/logs/${name}_test.log" 2>&1; then
-    echo "[test-FAIL] $name -- see logs/${name}_test.log" >> "$PROG"; return 1
-  fi
-  echo "[done] $name $(date +%F_%H:%M:%S) -> $rundir" >> "$PROG"
-}
+# PILA (our method)
+# $PYTHON train_pila.py --config $CFG/PILA_RTM_C_AUSTRIA_s123.json
+# $PYTHON train_pila.py --config $CFG/PILA_RTM_C_AUSTRIA_s240.json
+# $PYTHON train_pila.py --config $CFG/PILA_RTM_C_AUSTRIA_s318.json
 
-CONFIGS=$(ls "$HERE"/configs/*_s*.json | sort)
-echo "[SWEEP START] $(date +%F_%H:%M:%S) -- $(echo "$CONFIGS" | wc -l) runs, PARALLEL=$PARALLEL" >> "$PROG"
-for cfg in $CONFIGS; do
-  if [ "$PARALLEL" = "1" ]; then run_one "$cfg" & else run_one "$cfg"; fi
-done
-wait
-echo "[SWEEP DONE] $(date +%F_%H:%M:%S)" >> "$PROG"
-echo "Progress log: $PROG"
-echo "Next:  $PYTHON rebuttal/seed_variance/jm_seeds.py"
+# HVAE (baseline)
+# $PYTHON train_hvae.py --config $CFG/HVAE_RTM_C_AUSTRIA_s123.json
+# $PYTHON train_hvae.py --config $CFG/HVAE_RTM_C_AUSTRIA_s240.json
+# $PYTHON train_hvae.py --config $CFG/HVAE_RTM_C_AUSTRIA_s318.json
+
+# -------------------- 3. test / analyzer CSV --------------------
+# Writes model_best_testset_analyzer.csv next to the checkpoint. jm_seeds.py
+# reads exactly these six files, so this step is required before step 4.
+# Replace MMDD_HHMMSS with the run directory printed during training.
+
+# $PYTHON test_pila_rtm.py \
+#   --config $SAVE/PILA_RTM_C_AUSTRIA_s123/MMDD_HHMMSS/models/config.json \
+#   --resume $SAVE/PILA_RTM_C_AUSTRIA_s123/MMDD_HHMMSS/models/model_best.pth
+
+# $PYTHON test_hvae_rtm.py \
+#   --config $SAVE/HVAE_RTM_C_AUSTRIA_s123/MMDD_HHMMSS/models/config.json \
+#   --resume $SAVE/HVAE_RTM_C_AUSTRIA_s123/MMDD_HHMMSS/models/model_best.pth
+
+# Same for s240 and s318. To fill in the newest run directory automatically:
+# for name in PILA_RTM_C_AUSTRIA_s123 PILA_RTM_C_AUSTRIA_s240 PILA_RTM_C_AUSTRIA_s318; do
+#   d=$(ls -td $SAVE/$name/*/ | head -1)
+#   $PYTHON test_pila_rtm.py --config ${d}models/config.json --resume ${d}models/model_best.pth
+# done
+# for name in HVAE_RTM_C_AUSTRIA_s123 HVAE_RTM_C_AUSTRIA_s240 HVAE_RTM_C_AUSTRIA_s318; do
+#   d=$(ls -td $SAVE/$name/*/ | head -1)
+#   $PYTHON test_hvae_rtm.py --config ${d}models/config.json --resume ${d}models/model_best.pth
+# done
+
+# -------------------- 4. aggregate across seeds --------------------
+# Per-seed JM matrices -> mean +- std, plus the paired PILA-vs-HVAE comparison.
+# Writes figures/: <p>_summary.txt, <p>_group_stats.csv, <p>_seeds.png,
+# <p>_{PILA,HVAE}_{mean,std}.csv.
+
+# As plotted in Figure 8 (JM saturates at 2):
+# $PYTHON rebuttal/seed_variance/jm_seeds.py --space jm
+
+# On the underlying Bhattacharyya distance (unsaturated; the between-group
+# differences sit near the JM ceiling, which compresses them):
+# $PYTHON rebuttal/seed_variance/jm_seeds.py --space b
+
+# A subset of seeds, or one family only:
+# $PYTHON rebuttal/seed_variance/jm_seeds.py --seeds 240 318 --families PILA
+
+echo "Nothing ran: every command in $(basename "$0") is commented out by design."
+echo "Open it and uncomment the step you want."
