@@ -35,6 +35,8 @@ DATA = os.path.join(REPO, "data/processed/mogi_synth")
 OUT_DIR = os.path.join(HERE, "figures")
 K_LIST = [1, 2, 4]
 RANK_LIST = [0, 1, 2, 4, 6, 8]
+TAG = ""           # run-name tag: "" for clean, "n" for the noise variant
+DSUF = ""          # data-dir suffix: "" for clean, "_realistic" for noise
 STATIONS = list(json.load(open(os.path.join(REPO, "configs/station_info.json"))).keys())
 GPS = [f"{d}_{s}" for d in ("ux", "uy", "uz") for s in STATIONS]  # 36, matches gen order
 
@@ -60,15 +62,16 @@ def subspace_overlap(bias_recovered_mm, V_true):
 
 
 def eval_run(K, k):
-    name = f"SYN_K{K}_r{k}"
+    name = f"SYN_K{K}{TAG}_r{k}"
     ana_path = latest_analyzer(name)
     if ana_path is None:
         return None
     ana = pd.read_csv(ana_path)
-    gt = pd.read_csv(os.path.join(DATA, f"K{K}", "groundtruth.csv"))
-    basis = np.load(os.path.join(DATA, f"K{K}", "basis.npy"), allow_pickle=True).item()
-    xs = np.load(os.path.join(DATA, f"K{K}", "train_x_scale.npy"))
-    xm = np.load(os.path.join(DATA, f"K{K}", "train_x_mean.npy"))
+    dd = f"K{K}{DSUF}"
+    gt = pd.read_csv(os.path.join(DATA, dd, "groundtruth.csv"))
+    basis = np.load(os.path.join(DATA, dd, "basis.npy"), allow_pickle=True).item()
+    xs = np.load(os.path.join(DATA, dd, "train_x_scale.npy"))
+    xm = np.load(os.path.join(DATA, dd, "train_x_mean.npy"))
     V_true = basis["V"]                    # 36 x K, raw-space orthonormal
 
     m = ana.merge(gt, on="date", how="inner").sort_values("date").reset_index(drop=True)
@@ -124,6 +127,16 @@ def eval_run(K, k):
 
 
 def main():
+    global TAG, DSUF
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--noise", action="store_true",
+                    help="evaluate the pink+white noise variant (SYN_K*n_r*, K*_realistic data)")
+    args = ap.parse_args()
+    sfx = ""
+    if args.noise:
+        TAG, DSUF, sfx = "n", "_realistic", "_noise"
+
     rows = []
     for K in K_LIST:
         for k in RANK_LIST:
@@ -135,7 +148,7 @@ def main():
         return
     df = pd.DataFrame(rows)
     os.makedirs(OUT_DIR, exist_ok=True)
-    csv_path = os.path.join(OUT_DIR, "sweep_metrics.csv")
+    csv_path = os.path.join(OUT_DIR, f"sweep_metrics{sfx}.csv")
     df.to_csv(csv_path, index=False)
     print(df.to_string(index=False))
     print(f"\nmetrics -> {csv_path}")
@@ -159,10 +172,10 @@ def main():
         ax.set_xlabel("model residual rank k")
         ax.grid(alpha=0.3)
     axes.ravel()[0].legend(fontsize=9)
-    fig.suptitle("PILA synthetic-control rank sweep — elbow expected at k = K_true "
-                 "(dotted verticals)", fontsize=12)
+    fig.suptitle(f"PILA synthetic-control rank sweep{' (pink+white noise)' if args.noise else ''} "
+                 "— elbow expected at k = K_true (dotted verticals)", fontsize=12)
     fig.tight_layout()
-    out = os.path.join(OUT_DIR, "sweep_results.png")
+    out = os.path.join(OUT_DIR, f"sweep_results{sfx}.png")
     fig.savefig(out, dpi=120)
     print(f"figure   -> {out}")
 

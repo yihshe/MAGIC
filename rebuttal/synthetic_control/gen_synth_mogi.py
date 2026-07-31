@@ -18,16 +18,24 @@ Generative model (per timestamp t, raw units = mm)
              geometry is fixed, so S_vol(t) = dV(t) * m_hat lives in a SINGLE
              direction m_hat in R^36.
 
-  b(t)     : systematic bias of controllable intrinsic rank K,
-                 b(t) = A * sum_{j=1..K} v_j * g_j(t)              (B = G V^T)
-             - v_j : orthonormal spatial patterns, each ORTHOGONAL to m_hat
-                     (projected out before QR) so the bias is unreachable by the
-                     physics and cannot silently corrupt dV.
-             - g_j : distinct temporal drivers (Bevis trajectory-model terms;
-                     see DRIVERS). K distinct drivers => rank exactly K. Add more
-                     entries to DRIVERS to reach higher K ("more complexity").
-             - A   : single scalar so per-entry RMS(b) hits `bias_rms_mm` for
-                     EVERY K (total bias energy held constant across K).
+  b(t)     : systematic bias = K EQUAL-energy common-mode components. Each is one
+             orthonormal spatial pattern (a column of V) carrying its own realistic
+             Bevis trajectory (linear + annual + semiannual, realistic relative
+             sizes, random phases):
+                 b(t) = sum_{m=1..K} s_m(t) * V[:,m]           (B = S V^T)
+             - V   : K orthonormal spatial patterns, each ORTHOGONAL to m_hat
+                     (projected out before QR) so the bias cannot corrupt dV.
+             - s_m : K temporal signals, ORTHOGONALIZED (QR) so they are mutually
+                     uncorrelated with equal energy => B has a FLAT singular
+                     spectrum (all K singular values equal) => a sharp elbow at
+                     k=K. All three frequencies live in every mode.
+             - scaled so per-entry RMS(B) = bias_total_mm for EVERY K (total bias
+                     held constant across K; only the spatial rank changes).
+             Why spatial rank: PILA's residual is k fixed spatial patterns with
+             FREE time-varying coefficients c(t), so it can represent b iff
+             k >= dim(span V) = K, regardless of how many frequencies b contains.
+             NOTE: temporal orthogonality (the QR step) is what makes the spectrum
+             flat; without it the modes are correlated and the elbow smears out.
 
   eps(t)   : optional observation noise = white + flicker(pink). Per component,
              spatially independent => spatially full-rank => sets the irreducible
@@ -35,18 +43,20 @@ Generative model (per timestamp t, raw units = mm)
 
 Magnitude calibration (from the real rank-4 PILA decomposition, in mm RMS):
     physics 2.82 | bias 2.60 | noise(recon resid) 3.14 | target 5.39
-    => bias/physics ~ 0.9, noise/physics ~ 1.1.  Defaults below match this.
+    => bias/physics ~ 0.9.  vol_rms_mm and bias_total_mm default to ~1:1.
 
 How the true rank is controlled (and verified)
 ----------------------------------------------
-  rank(B) = rank(G V^T) = K when V has K independent columns (orthonormal via QR)
-  and G has K independent columns (distinct drivers). The script SVDs the
-  centered bias matrix and asserts exactly K singular values survive.
+  B (T x 36) = S V^T with S (T x K) orthonormal columns (QR) and V (36 x K)
+  orthonormal columns. Both factors orthonormal => B has exactly K nonzero and
+  EQUAL singular values, i.e. spatial rank = K with a flat spectrum. The script
+  SVDs the centered bias matrix and ASSERTS exactly K singular values survive --
+  so the ground-truth spatial rank is guaranteed to be K, and (being flat) gives
+  the sharpest possible reconstruction elbow at k=K.
 
 Run:
-    python rebuttal/gen_synth_mogi.py                       # clean, K in {1,2,4}
-    python rebuttal/gen_synth_mogi.py --noise realistic     # + pink+white noise
-    python rebuttal/gen_synth_mogi.py --ranks 1 2 4 6 8     # higher-rank bias
+    python rebuttal/synthetic_control/gen_synth_mogi.py                    # clean
+    python rebuttal/synthetic_control/gen_synth_mogi.py --noise realistic  # +noise
 """
 import os
 import sys
@@ -67,7 +77,8 @@ from physics.mogi.mogi import Mogi  # noqa: E402
 CFG = dict(
     seed=0,
     start_date=(2006, 1, 1),
-    n_days=6574,                  # 2006-01-01 .. 2023-12-31 (daily)
+    n_days=2922,                  # ~8 years: enough snapshots for the residual to be
+                                  # identifiable (3 yr under-trains it, smearing the elbow)
     ranks=[1, 2, 4],
 
     # Fixed Mogi source (physical; within configs/mogi_paras.json ranges)
@@ -78,13 +89,21 @@ CFG = dict(
     # the source always deforming so the geometry stays identifiable throughout
     # (only the relative/transient change is scientifically meaningful). Set
     # dV_base_frac=0 to recover a ramp starting from dV=0.
-    ramp_onset_frac=0.40,         # onset (time shift) as fraction of timeline
-    ramp_width_frac=0.06,         # transition width as fraction of timeline
-    dV_base_frac=2.0,             # baseline as a multiple of the transient amplitude
+    ramp_onset_frac=0.40,         # onset (time shift) as fraction of the record
+    ramp_width_day=30,            # atan width in days (10-90% rise ~6*width ~ 6 months)
+    dV_base_frac=1.0,             # baseline as a multiple of the transient amplitude
+                                  # (=1 => dV doubles across the step: prominent)
 
-    # Target per-entry RMS magnitudes (mm), calibrated to real decomposition.
-    vol_rms_mm=2.5,               # volcanic (Mogi) signal
-    bias_rms_mm=2.5,              # systematic bias (held constant across K)
+    # Volcanic transient VARIATION (temporal std of the Mogi signal, mm) -- the
+    # part that survives standardization and competes with the bias.
+    vol_rms_mm=2.5,
+
+    # Systematic bias = K EQUAL-energy common-mode components, each a realistic
+    # Bevis trajectory (linear + annual + semiannual, realistic relative sizes,
+    # random phases). Equal energy => flat singular spectrum => sharp elbow at
+    # k=K; total bias RMS is held at bias_total_mm (~= vol, 1:1) for every K.
+    bias_total_mm=2.5,            # total systematic-bias per-entry RMS (constant across K)
+    bias_rel=(1.0, 2.0, 1.0),     # relative sizes: (linear, annual, semiannual)
 
     # Observation noise per component (mm RMS). Presets via --noise.
     noise_white_mm=0.0,
@@ -106,19 +125,19 @@ NOISE_PRESETS = {
     "realistic": dict(noise_white_mm=1.8, noise_flicker_mm=2.2),  # ~3.1mm total, real floor
 }
 
-# Ordered temporal-driver dictionary (Bevis trajectory-model terms + harmonics).
-# K activates the first K entries; extend this list to reach higher ranks.
 T_ANN = 365.25
-DRIVERS = [
-    ("linear",         lambda t: t.astype(np.float64)),
-    ("annual_sin",     lambda t: np.sin(2 * np.pi * t / T_ANN)),
-    ("annual_cos",     lambda t: np.cos(2 * np.pi * t / T_ANN)),
-    ("semiannual_sin", lambda t: np.sin(2 * np.pi * t / (T_ANN / 2))),
-    ("semiannual_cos", lambda t: np.cos(2 * np.pi * t / (T_ANN / 2))),
-    ("terannual_sin",  lambda t: np.sin(2 * np.pi * t / (T_ANN / 3))),
-    ("terannual_cos",  lambda t: np.cos(2 * np.pi * t / (T_ANN / 3))),
-    ("quadratic",      lambda t: (t.astype(np.float64)) ** 2),
-]
+
+
+def bevis_trajectory(t, rel, rng):
+    """One realistic common-mode signal: linear trend + annual + semiannual
+    (relative sizes `rel`, random signs/phases). Returned zero-mean, unit-RMS."""
+    r_lin, r_ann, r_semi = rel
+    yr = (t - t.mean()) / T_ANN
+    s = (r_lin * np.sign(rng.standard_normal()) * yr
+         + r_ann * np.cos(2 * np.pi * t / T_ANN + rng.uniform(0, 2 * np.pi))
+         + r_semi * np.cos(2 * np.pi * t / (T_ANN / 2) + rng.uniform(0, 2 * np.pi)))
+    s = s - s.mean()
+    return s / np.sqrt(np.mean(s ** 2))
 
 
 # --------------------------------------------------------------------------- #
@@ -172,11 +191,11 @@ def make_dates(start, n):
 
 def build_spatial_basis(m_hat, K, rng):
     R = rng.standard_normal((36, K))
-    R = R - np.outer(m_hat, m_hat @ R)      # project out volcanic direction
+    R = R - np.outer(m_hat, m_hat @ R) #TODO not sure what this means     # project out volcanic direction
     Q, _ = np.linalg.qr(R)
     V = Q[:, :K]
     for j in range(K):
-        if V[np.argmax(np.abs(V[:, j])), j] < 0:
+        if V[np.argmax(np.abs(V[:, j])), j] < 0: #TODO: not sure what this means.
             V[:, j] *= -1
     return V
 
@@ -184,7 +203,7 @@ def build_spatial_basis(m_hat, K, rng):
 def rank_check(B, tol_ratio=1e-6):
     Bc = B - B.mean(axis=0, keepdims=True)
     s = np.linalg.svd(Bc, compute_uv=False)
-    eff = int(np.sum(s > tol_ratio * s[0])) if s[0] > 0 else 0
+    eff = int(np.sum(s > tol_ratio * s[0]))#TODO: how is this tol_ratio decided? if s[0] > 0 else 0
     return s, eff
 
 
@@ -192,7 +211,6 @@ def rank_check(B, tol_ratio=1e-6):
 # Core generation for one K
 # --------------------------------------------------------------------------- #
 def generate_for_K(K, cfg, out_suffix):
-    assert K <= len(DRIVERS), f"K={K} exceeds available drivers ({len(DRIVERS)})"
     rng = np.random.default_rng(cfg["seed"] + K)
     names, x_km, y_km = load_stations()
     N = cfg["n_days"]
@@ -208,24 +226,36 @@ def generate_for_K(K, cfg, out_suffix):
     # signal, which is what survives standardization); dV_base keeps |dV| away
     # from zero so the geometry stays identifiable even before/at onset.
     onset = cfg["ramp_onset_frac"] * N
-    width = cfg["ramp_width_frac"] * N
+    width = cfg["ramp_width_day"]
     ramp = np.arctan((t - onset) / width)
     ramp = (ramp - ramp.min()) / (ramp.max() - ramp.min())        # transient shape [0,1]
     S_trans_unit = mogi_forward(x_km, y_km, cfg["xcen_km"], cfg["ycen_km"],
                                 cfg["d_km"], ramp, cfg["poisson_nu"])
-    vol_scale = cfg["vol_rms_mm"] / np.sqrt(np.mean(S_trans_unit ** 2))
+    # calibrate the transient VARIATION (temporal std) so vol_rms_mm is directly
+    # comparable to the bias amplitudes (both are variations about the mean).
+    S_trans_var = S_trans_unit - S_trans_unit.mean(0, keepdims=True)
+    vol_scale = cfg["vol_rms_mm"] / np.sqrt(np.mean(S_trans_var ** 2))
     dV_base = cfg["dV_base_frac"] * vol_scale
     dV = dV_base + ramp * vol_scale                               # absolute dV(t)
     S_vol = mogi_forward(x_km, y_km, cfg["xcen_km"], cfg["ycen_km"],
                          cfg["d_km"], dV, cfg["poisson_nu"])       # includes baseline
 
-    # systematic bias of intrinsic rank K
-    V = build_spatial_basis(m_hat, K, rng)
-    G = np.stack([unit_rms(DRIVERS[j][1](t)) for j in range(K)], axis=1)
-    B_unit = G @ V.T
-    B = B_unit * (cfg["bias_rms_mm"] / np.sqrt(np.mean(B_unit ** 2)))
+    # transient timing/magnitude ground truth (dV is monotonic: baseline -> plateau)
+    dv_lo, dv_hi = float(dV.min()), float(dV.max())
+    _cross = lambda f: int(np.argmax(dV >= dv_lo + f * (dv_hi - dv_lo)))
+    t_start, t_end = _cross(0.05), _cross(0.95)                   # 5%-95% of the change
+
+    # systematic bias: K EQUAL-energy common-mode components. Each is one
+    # orthonormal spatial pattern (column of V, V^T m_hat = 0) carrying its own
+    # realistic Bevis trajectory. Equal energy => flat spectrum => sharp elbow at
+    # k=K; total per-entry RMS(B) = bias_total_mm for every K.
+    V = build_spatial_basis(m_hat, K, rng)                # 36 x K orthonormal, ⟂ m_hat
+    S = np.stack([bevis_trajectory(t, cfg["bias_rel"], rng) for _ in range(K)], axis=1)
+    S, _ = np.linalg.qr(S)                                # orthonormal temporal modes
+    B0 = S @ V.T                                          # equal singular values (flat)
+    B = B0 * (cfg["bias_total_mm"] / np.sqrt(np.mean(B0 ** 2)))   # per-entry RMS=bias_total
     svals, eff_rank = rank_check(B)
-    assert eff_rank == K, f"K={K}: expected rank {K}, got {eff_rank}"
+    assert eff_rank == K, f"K={K}: expected spatial rank {K}, got {eff_rank}"
 
     # observation noise (white + flicker), per component, spatially independent
     E = np.zeros((N, 36))
@@ -283,8 +313,22 @@ def generate_for_K(K, cfg, out_suffix):
         gt[f"svol_true_{col}"] = S_vol[:, c]
     gt.to_csv(os.path.join(out_dir, "groundtruth.csv"), index=False)
     np.save(os.path.join(out_dir, "basis.npy"),
-            {"V": V, "m_hat": m_hat, "drivers": [DRIVERS[j][0] for j in range(K)]},
+            {"V": V, "m_hat": m_hat, "freqs": ["linear", "annual", "semiannual"]},
             allow_pickle=True)
+
+    # realized physical magnitudes (for realism check), recovered from B by
+    # projection onto each Bevis component.
+    yr = (t - t.mean()) / T_ANN
+    slope_field = (B * yr[:, None]).sum(0) / (yr ** 2).sum()   # mm/yr per station
+    lin_rate_rms = float(np.sqrt(np.mean(slope_field ** 2)))
+    lin_rate_max = float(np.max(np.abs(slope_field)))
+
+    def _amp(fs, fc):    # per-station amplitude of a sin/cos pair, RMS over stations
+        a = (B * fs[:, None]).sum(0) / (fs ** 2).sum()
+        b = (B * fc[:, None]).sum(0) / (fc ** 2).sum()
+        return float(np.sqrt(np.mean(a ** 2 + b ** 2)))
+    ann_amp = _amp(np.sin(2 * np.pi * t / T_ANN), np.cos(2 * np.pi * t / T_ANN))
+    semi_amp = _amp(np.sin(2 * np.pi * t / (T_ANN / 2)), np.cos(2 * np.pi * t / (T_ANN / 2)))
 
     # std-space overlap of bias with the physics direction (leakage indicator):
     # fraction of bias energy lying along m_hat AFTER per-column standardization.
@@ -303,9 +347,15 @@ def generate_for_K(K, cfg, out_suffix):
     meta = dict(
         K_true=K, effective_rank=eff_rank,
         singular_values=svals[:min(8, len(svals))].tolist(),
-        drivers=[DRIVERS[j][0] for j in range(K)],
+        bias_freqs=["linear", "annual", "semiannual"],
+        bias_annual_amp_mm=ann_amp, bias_semiannual_amp_mm=semi_amp,
+        bias_linear_rate_rms_mm_yr=lin_rate_rms, bias_linear_rate_max_mm_yr=lin_rate_max,
         n_days=N, n_train=len(train_idx), n_valid=len(valid_idx), n_test=len(test_idx),
-        ramp_onset_days=float(onset), ramp_width_days=float(width),
+        ramp_onset_day=float(onset), ramp_width_day=float(width),
+        transient_start_day=t_start, transient_end_day=t_end,
+        transient_start_date=date_str[t_start], transient_end_date=date_str[t_end],
+        transient_duration_days=int(t_end - t_start),
+        dV_baseline_m3=dv_lo, dV_plateau_m3=dv_hi, dV_change_m3=float(dv_hi - dv_lo),
         realized_vol_transient_rms_mm=vol_tr_rms,
         realized_vol_abs_rms_mm=float(np.sqrt(np.mean(S_vol ** 2))),
         realized_bias_rms_mm=float(np.sqrt(np.mean(B ** 2))),
@@ -328,11 +378,21 @@ def main():
     ap.add_argument("--noise", choices=list(NOISE_PRESETS), default="none")
     ap.add_argument("--suffix", default=None,
                     help="output dir suffix; default '' for none, '_<noise>' otherwise")
+    ap.add_argument("--n-days", type=int, default=None, help="record length in days")
+    ap.add_argument("--vol-rms", type=float, default=None, help="transient displacement RMS (mm)")
+    ap.add_argument("--dv-base-frac", type=float, default=None,
+                    help="baseline dV as a multiple of the transient amplitude")
     args = ap.parse_args()
 
     cfg = dict(CFG)
     if args.ranks:
         cfg["ranks"] = args.ranks
+    if args.n_days:
+        cfg["n_days"] = args.n_days
+    if args.vol_rms is not None:
+        cfg["vol_rms_mm"] = args.vol_rms
+    if args.dv_base_frac is not None:
+        cfg["dV_base_frac"] = args.dv_base_frac
     cfg.update(NOISE_PRESETS[args.noise])
     suffix = args.suffix if args.suffix is not None else ("" if args.noise == "none" else f"_{args.noise}")
 
@@ -340,11 +400,17 @@ def main():
           f"(white={cfg['noise_white_mm']} flicker={cfg['noise_flicker_mm']} mm) suffix='{suffix}'")
     for K in cfg["ranks"]:
         meta, out_dir = generate_for_K(K, cfg, suffix)
-        print(f"  K={K}: rank={meta['effective_rank']} "
-              f"vol_tr={meta['realized_vol_transient_rms_mm']:.2f} "
+        print(f"  K={K} (spatial rank): vol_tr={meta['realized_vol_transient_rms_mm']:.2f} "
               f"bias={meta['realized_bias_rms_mm']:.2f} noise={meta['realized_noise_rms_mm']:.2f} mm | "
-              f"bias/vol={meta['bias_to_vol_ratio']:.2f} noise/vol={meta['noise_to_vol_ratio']:.2f} "
-              f"dV=[{meta['dV_min_m3']:.2e},{meta['dV_max_m3']:.2e}] -> {out_dir}")
+              f"bias/vol={meta['bias_to_vol_ratio']:.2f} noise/vol={meta['noise_to_vol_ratio']:.2f}")
+        print(f"        bias components: linear {meta['bias_linear_rate_rms_mm_yr']:.2f} mm/yr "
+              f"(max {meta['bias_linear_rate_max_mm_yr']:.2f}), "
+              f"annual {meta['bias_annual_amp_mm']:.2f} mm, semiannual {meta['bias_semiannual_amp_mm']:.2f} mm; "
+              f"singular values (norm) {np.array2string(np.array(meta['singular_values'][:K])/meta['singular_values'][0], precision=2)}")
+        print(f"        transient: {meta['transient_start_date']} -> {meta['transient_end_date']} "
+              f"({meta['transient_duration_days']} d, ~{meta['transient_duration_days']/365:.2f} yr); "
+              f"dV {meta['dV_baseline_m3']:.2e} -> {meta['dV_plateau_m3']:.2e} m^3 "
+              f"(Δ{meta['dV_change_m3']:.2e}, range [-1e7,1e7]) -> {out_dir}")
     print("Done.")
 
 

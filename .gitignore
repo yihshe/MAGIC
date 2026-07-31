@@ -136,6 +136,7 @@ __MACOSX/
 rebuttal/synthetic_control/figures/
 rebuttal/synthetic_control/logs/
 data/processed/mogi_synth/
+data/processed/mogi_synth_/
 .claude/
 # GreenHyperSpectra rebuttal: bulk arrays are regenerable from
 # rebuttal/greenhyperspectra/preprocess_greenhyperspectra.py; the small

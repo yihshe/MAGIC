@@ -12,6 +12,8 @@ Run:  python rebuttal/plot_params.py
 """
 import os
 import glob
+import json
+import argparse
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -35,6 +37,21 @@ PARAMS = [
 SMOOTH = 60  # rolling-median window (days) for legibility
 
 
+def physical_ranges():
+    """Full physical search range of each Mogi variable, from configs/mogi_paras.json.
+    (This is the range the model could have produced — the fair y-scale for judging
+    whether recovered-parameter oscillations are meaningful.)"""
+    p = json.load(open(os.path.join(REPO, "configs/mogi_paras.json")))
+    dv_lo = p["dV"]["min"] * 1e5 - 1e7          # rescale: z*(200)*1e5 - 1e7
+    dv_hi = p["dV"]["max"] * 1e5 - 1e7
+    return {
+        "latent_xcen": (p["xcen"]["min"], p["xcen"]["max"]),
+        "latent_ycen": (p["ycen"]["min"], p["ycen"]["max"]),
+        "latent_d":    (p["d"]["min"], p["d"]["max"]),
+        "latent_dV":   (dv_lo, dv_hi),
+    }
+
+
 def load(K, k):
     hits = sorted(glob.glob(os.path.join(SAVED, f"SYN_K{K}_r{k}", "*", "models",
                                           "model_best_testset_analyzer.csv")))
@@ -46,6 +63,11 @@ def load(K, k):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--physical-range", action="store_true",
+                    help="fix each y-axis to the variable's full physical search range")
+    args = ap.parse_args()
+    prange = physical_ranges() if args.physical_range else None
     os.makedirs(FIG, exist_ok=True)
 
     # ---- numeric accuracy table ----
@@ -91,16 +113,20 @@ def main():
                 ax.plot(t, est.rolling(SMOOTH, center=True, min_periods=1).median(),
                         color=color, lw=1.3, label=lab, alpha=0.9)
             ax.set_ylabel(label, fontsize=9)
+            if prange is not None:
+                ax.set_ylim(prange[col])
             if ri == 0:
                 ax.set_title(f"K_true = {K}", fontsize=11)
             if ri == len(PARAMS) - 1:
                 ax.set_xlabel("day")
             ax.grid(alpha=0.3)
     axes[0, 0].legend(fontsize=8, loc="best")
-    fig.suptitle(f"Mogi parameter recovery vs ground truth "
-                 f"({SMOOTH}-day rolling median)", fontsize=13)
+    scale_note = ("full physical search range" if prange is not None
+                  else f"{SMOOTH}-day rolling median")
+    fig.suptitle(f"Mogi parameter recovery vs ground truth ({scale_note})", fontsize=13)
     fig.tight_layout()
-    out = os.path.join(FIG, "param_recovery.png")
+    out = os.path.join(FIG, "param_recovery_physrange.png" if prange is not None
+                       else "param_recovery.png")
     fig.savefig(out, dpi=120)
     print(f"\nfigure -> {out}")
     print(f"table  -> {os.path.join(FIG, 'param_accuracy.csv')}")

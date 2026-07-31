@@ -70,7 +70,7 @@ def main():
               f"rank(raw)={int(np.sum(s_raw > 1e-6 * s_raw[0]))} "
               f"rank(std)={int(np.sum(s_std > 1e-6 * s_std[0]))} | "
               f"vol={rms(svol):.2f} bias={rms(bias):.2f} noise={rms(noise):.2f} mm | "
-              f"drivers={basis['drivers']}")
+              f"freqs={basis.get('freqs', basis.get('drivers'))}")
 
     has_noise = any(np.abs(comps[K][4]).max() > 1e-9 for K in RANKS)
     ncol = 4 if has_noise else 3
@@ -78,7 +78,9 @@ def main():
     for row, K in enumerate(RANKS):
         dates, dV, svol, bias, noise = comps[K]
         t = np.arange(len(dV))
-        j = GPS.index("uz_AKGG")
+        # pick the station where the volcanic transient is largest (nearest the
+        # source) -- the relevant, representative station (not a bias-heavy outlier)
+        j = int(np.argmax(np.std(svol, axis=0)))
 
         ax = axes[row, 0]
         ax.plot(t, dV, "k")
@@ -89,7 +91,7 @@ def main():
                 label="observed")
         ax.plot(t, bias[:, j], "C1", lw=0.9, label="bias")
         ax.plot(t, svol[:, j], "C0", lw=1.4, label="volcanic")
-        ax.set_title(f"K={K}: decomposition (uz_AKGG)"); ax.set_ylabel("mm")
+        ax.set_title(f"K={K}: decomposition ({GPS[j]})"); ax.set_ylabel("mm")
         if row == 0:
             ax.legend(fontsize=8, loc="upper left")
 
