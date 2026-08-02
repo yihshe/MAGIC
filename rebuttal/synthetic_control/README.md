@@ -108,11 +108,21 @@ at every rank.**
 
 **Two orthogonality constructions fix the rank at exactly $K$.**
 
-1. *Spatial* — draw $V$ Gaussian, project out the volcanic direction, and orthonormalize:
+1. *Spatial* — draw $K$ random Gaussian vectors, subtract from **each** its projection
+   onto the volcanic direction $\hat m$, then orthonormalize:
 $$
-V \leftarrow \operatorname{QR}\big((I-\hat m\hat m^\top)\,G\big),\quad G\sim\mathcal N(0,1)^{S\times K}
-\;\Rightarrow\; V^\top V=I_K,\;\; V^\top \hat m = 0 .
+G=[g_1,\dots,g_K]\sim\mathcal N(0,1)^{S\times K},\qquad
+g_j \;\leftarrow\; g_j-\underbrace{(\hat m^{\top} g_j)}_{\text{projection length}}\hat m,\qquad
+V\leftarrow\operatorname{QR}(G).
 $$
+   For each random vector $g_j$, the scalar $\hat m^{\top}g_j$ is *how far it points along*
+   $\hat m$, and $(\hat m^{\top}g_j)\,\hat m$ is *that component itself*; subtracting it
+   leaves $g_j\perp\hat m$. Stacked over all columns the subtraction is
+   $G-\hat m(\hat m^{\top}G)$ — exactly the code line
+   `R - np.outer(m_hat, m_hat @ R)`, where `m_hat @ R` $=\hat m^{\top}G$ is the row of
+   projection lengths and `np.outer(...)` rebuilds the projections $\hat m(\hat m^{\top}G)$.
+   (Equivalently, $G-\hat m(\hat m^{\top}G)=(I-\hat m\hat m^{\top})G$.) QR then
+   orthonormalizes, giving $V^{\top}V=I_K$ and $V^{\top}\hat m=0$.
 Orthogonality to $\hat m$ means the bias is **unreachable by the physics**, so it cannot be
 silently absorbed into $\Delta V$ (preserving identifiability).
 

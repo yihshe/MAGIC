@@ -30,8 +30,8 @@ PYTHON="${PYTHON:-python}"
 
 # PILA evaluation (RTM)
 # $PYTHON test_pila_rtm.py \
-#   --config saved/rtm/EXPERIMENT_NAME/MMDD_HHMMSS/models/config.json \
-#   --resume saved/rtm/EXPERIMENT_NAME/MMDD_HHMMSS/models/model_best.pth \
+#   --config saved/mogi/EXPERIMENT_NAME/MMDD_HHMMSS/models/config.json \
+#   --resume saved/mogi/EXPERIMENT_NAME/MMDD_HHMMSS/models/model_best.pth
 #   --insitu
 
 # HVAE evaluation (Mogi)

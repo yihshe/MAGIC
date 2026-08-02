@@ -8,7 +8,8 @@ import os
 import json
 
 # %%
-BASE_PATH = '/maps/ys611/MAGIC/saved/rtm/PHYS_VAE_RTM_C_AUSTRIA_SMPL/1016_181644_klp0_edge1/models'
+# BASE_PATH = '/maps/ys611/PILA/saved/rtm/PHYS_VAE_RTM_C_AUSTRIA_SMPL/1016_181644_klp0_edge1/models'
+BASE_PATH = '/maps/ys611/PILA/saved/rtm/PILA_RTM_C_AUSTRIA/0730_151507/models/'
 # TODO add VanillaAE and NNRegressor for analysis
 # CSV_PATH0 = os.path.join(
 #     BASE_PATH, 'rtm/models/PHYS_VAE_RTM_A_WYTHAM/0323_204514/model_best_testset_analyzer.csv')
@@ -64,7 +65,7 @@ S2_names = {
     'B09_WV': 'WV', 'B11_SWI1': 'SWI1', 'B12_SWI2': 'SWI2'
 }
 
-rtm_paras = json.load(open('/maps/ys611/MAGIC/configs/rtm_paras.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
+rtm_paras = json.load(open('/maps/ys611/PILA/configs/rtm_paras.json'))# Range of LAIu has been changed from [0.01, 1] to [0.01, 5]
 
 ATTRS = list(rtm_paras.keys())
 # for each attr in ATTRS, create a LaTex variable name like $Z_{\mathrm{attr}}$
@@ -86,10 +87,10 @@ df2 = pd.read_csv(CSV_PATH2)
 # df3 = pd.read_csv(CSV_PATH3)
 
 # retrieve the target and output bands to original scale
-MEAN = np.load('/maps/ys611/MAGIC/data/processed/rtm/real/train_x_mean.npy')
-SCALE = np.load('/maps/ys611/MAGIC/data/processed/rtm/real/train_x_scale.npy')
-# MEAN = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period/train_x_mean.npy')
-# SCALE = np.load('/maps/ys611/MAGIC/data/processed/rtm/wytham/insitu_period/train_x_scale.npy')
+MEAN = np.load('/maps/ys611/PILA/data/processed/rtm/real/train_x_mean.npy')
+SCALE = np.load('/maps/ys611/PILA/data/processed/rtm/real/train_x_scale.npy')
+# MEAN = np.load('/maps/ys611/PILA/data/processed/rtm/wytham/insitu_period/train_x_mean.npy')
+# SCALE = np.load('/maps/ys611/PILA/data/processed/rtm/wytham/insitu_period/train_x_scale.npy')
 
 for x in ['target', 'output']:
     # df1[[f'{x}_{band}' for band in S2_BANDS]] = df1[[f'{x}_{band}' for band in S2_BANDS]]*SCALE + MEAN
@@ -206,13 +207,13 @@ ATTRS = list(rtm_paras.keys())
 # create one figure and plot both variable predictions of different models as a subplot
 
 # Plot only N, cw, cm, fc
-# ATTRS = ['N', 'cw', 'cm', 'fc']
-fig, axs = plt.subplots(2, 4, figsize=(26, 10))
-# fig, axs = plt.subplots(1, 4, figsize=(26, 5))
+ATTRS = ['N', 'cw', 'cm', 'fc']
+# fig, axs = plt.subplots(2, 4, figsize=(26, 10))
+fig, axs = plt.subplots(1, 4, figsize=(26, 5))
 
 for i, attr in enumerate(ATTRS):
-    ax=axs[i//4, i % 4]
-    # ax = axs[i]
+    # ax=axs[i//4, i % 4]
+    ax = axs[i]
     sns.histplot(
         df_coniferous[f'latent_{attr}'].values,
         bins=NUM_BINS,
@@ -239,12 +240,12 @@ for i, attr in enumerate(ATTRS):
     # set the distance between the y label and the y axis
     ax.yaxis.labelpad = 10
     ax.legend(fontsize=fontsize-5)
-axs[-1, -1].axis('off')
+# axs[-1, -1].axis('off')
 plt.tight_layout()
-# plt.savefig(os.path.join(
-#     SAVE_PATH, 'histogram_realset_vars_coniferous_v_deciduous_N_cw_cm_fc.png'), dpi=300)
 plt.savefig(os.path.join(
-    SAVE_PATH, 'histogram_realset_vars_coniferous_v_deciduous.png'), dpi=300)
+    SAVE_PATH, 'histogram_realset_vars_coniferous_v_deciduous_N_cw_cm_fc.png'), dpi=300)
+# plt.savefig(os.path.join(
+#     SAVE_PATH, 'histogram_realset_vars_coniferous_v_deciduous.png'), dpi=300)
 plt.show()
     
 

@@ -95,7 +95,7 @@ SAVE=saved/mogi_synth
 # -------------------- 5. analysis --------------------
 # Metrics and figures against the known ground truth -> figures/sweep_metrics.csv,
 # figures/sweep_results.png.
-# $PYTHON rebuttal/synthetic_control/eval_sweep.py
+$PYTHON -m pdb rebuttal/synthetic_control/eval_sweep.py
 
 # Per-variable recovery of the Mogi parameters, per K_true and model rank k ->
 # figures/param_accuracy.csv, figures/param_recovery.png.

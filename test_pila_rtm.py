@@ -60,7 +60,7 @@ def main(config, args: argparse.Namespace):
         )
         logger.info(f"Using full region mapping data: {data_dir_test}")
     elif args.insitu:
-        data_dir_test = config.config['data_loader']['data_dir_test'].replace('test.csv', 'test_frm4veg.csv')
+        data_dir_test = config.config['data_loader']['data_dir_test'].replace('real/test.csv', 'wytham/test_frm4veg.csv')
     else:
         data_dir_test = config.config['data_loader']['data_dir_test']
     # setup data_loader instances
