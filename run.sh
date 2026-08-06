@@ -34,6 +34,10 @@ PYTHON="${PYTHON:-python}"
 #   --resume saved/mogi/EXPERIMENT_NAME/MMDD_HHMMSS/models/model_best.pth
 #   --insitu
 
+$PYTHON test_pila_rtm.py \
+  --config saved/rtm/PHYS_VAE_RTM_C_AUSTRIA_SMPL/0802_145450_klp0_edge0/models/config.json \
+  --resume saved/rtm/PHYS_VAE_RTM_C_AUSTRIA_SMPL/0802_145450_klp0_edge0/models/model_best.pth
+
 # HVAE evaluation (Mogi)
 # $PYTHON test_hvae_mogi.py \
 #   --config saved/mogi/EXPERIMENT_NAME/MMDD_HHMMSS/models/config.json \

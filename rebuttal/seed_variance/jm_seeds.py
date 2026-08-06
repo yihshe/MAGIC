@@ -122,7 +122,7 @@ def group_stats(jm):
         # spreads all species further apart. The claim under test is that PILA
         # scores higher than HVAE on these at every seed.
         'gap_between_minus_within': float(np.mean(between) - np.mean(within)),
-        'separability_ratio': float(np.mean(between) / np.mean(within)),
+        'separability_ratio': float(np.mean(between) / np.mean(within)), #NOTE: this metric is not very useful, because within group distance is also expected to be the bigger, the better.
     }
 
 

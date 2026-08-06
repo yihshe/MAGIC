@@ -40,7 +40,8 @@ documented follow-ups, not part of this experiment.
 | `configs/` | `{PILA,HVAE}_PROSAIL_{A,B,C}_ghs.json` (C is the one that matters) |
 | `run_greenhyperspectra.sh` | every step, commented out, debugger-friendly |
 | `eval_greenhyperspectra.py` | checkpoint → metrics, predictions CSV and 1:1 plots |
-| `compare_greenhyperspectra.py` | the headline PILA-vs-HVAE table |
+| `compare_greenhyperspectra.py` | the headline PILA-vs-HVAE R² table |
+| `visual_greenhyperspectra.py` | mean/MAE table + KDE residual figures for the rebuttal |
 | `figures/`, `logs/` | outputs |
 
 ## Commands
@@ -177,6 +178,61 @@ consequence is that R² is penalised by a bias neither model can learn, so
 
 `data/report.txt` prints where every observed extreme lands in z-space, and the
 percentile each fixed value sits at.
+
+## Results
+
+Variant C, single seed, evaluated on `labeled_splits/test.csv`. Both models are
+trained fully unsupervised. `Mean` is in physical units over the rows carrying a
+label for that trait; `MAE` is on the range-normalized residual
+`(pred − true) / (max − min)`, so it is comparable across traits.
+
+| Model | cab Mean | cab MAE | cw Mean | cw MAE | cm Mean | cm MAE | LAI Mean | LAI MAE |
+|---|---|---|---|---|---|---|---|---|
+| HVAE | 53.05 | 0.185 | 0.02415 | 0.162 | 0.01705 | 0.153 | 9.186 | 0.646 |
+| HVAE (end-stop) | 53.05 | 0.157 | 0.02151 | 0.131 | 0.01824 | 0.158 | 1.833 | 0.185 |
+| **PILA** | **40.74** | **0.113** | **0.02147** | **0.119** | **0.01574** | **0.134** | 2.075 | **0.170** |
+| Ground Truth | 37.84 | N/A | 0.01392 | N/A | 0.008714 | N/A | 3.247 | N/A |
+
+n per trait: cab=396, cw=424, cm=736, LAI=284.
+
+**PILA has the lowest MAE on all four traits against both baselines**, and the
+mean closest to ground truth on cab, cw and cm.
+
+Two things the table makes visible:
+
+* **HVAE collapses LAI onto the upper end-stop.** Its mean LAI is 9.186 against
+  a range maximum of 9.2 — every sample is pushed to an optically infinite
+  canopy, which makes the RTM output near-constant and lets the correction carry
+  the reconstruction. Adding the end-stop penalty fixes that specific failure
+  (LAI MAE 0.646 → 0.185, mean 9.186 → 1.833) but does not close the gap to
+  PILA on any trait.
+* **Every model overestimates cw and cm.** That is the linear sigmoid mapping:
+  the range midpoint is 3.6× (cw) and 4.9× (cm) the training median, so a
+  partially-informed latent shrinks toward a value well above the truth. It is a
+  shared bias, not a difference between the models — see the Ranges section for
+  why the warp that would remove it was left out.
+
+The reconstruction-side diagnostic tells the same story more sharply:
+
+| | recon RMSE | physics-only RMSE | correction size |
+|---|---|---|---|
+| PILA | 0.2896 | **0.3526** | small |
+| HVAE | **0.0763** | 1.2803 | dominant |
+| HVAE (end-stop) | 0.0695 | 1.0110 | dominant |
+
+Both HVAE variants reconstruct the spectra ~4× better than PILA while their
+physics branch alone is *worse than predicting the per-band mean* (1.0 in
+standardized units). They fit by bypassing the RTM. PILA's physics branch does
+the work, which is why its retrieved traits track the measurements.
+
+Regenerate with:
+
+```bash
+python rebuttal/greenhyperspectra/visual_greenhyperspectra.py
+```
+
+which writes `mean_mae_table.{csv,tex,md}` and the two KDE figures
+(`kde_hvae_vs_pila.png`, `kde_hvae_endstop_vs_pila.png`) into `figures/`.
 
 ## Changes to the main tree
 

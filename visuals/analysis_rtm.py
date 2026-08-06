@@ -9,7 +9,7 @@ import json
 
 # %%
 # BASE_PATH = '/maps/ys611/PILA/saved/rtm/PHYS_VAE_RTM_C_AUSTRIA_SMPL/1016_181644_klp0_edge1/models'
-BASE_PATH = '/maps/ys611/PILA/saved/rtm/PILA_RTM_C_AUSTRIA/0730_151507/models/'
+BASE_PATH = '/maps/ys611/PILA/saved/rtm/PHYS_VAE_RTM_C_AUSTRIA_SMPL/0802_145450_klp0_edge0/models'
 # TODO add VanillaAE and NNRegressor for analysis
 # CSV_PATH0 = os.path.join(
 #     BASE_PATH, 'rtm/models/PHYS_VAE_RTM_A_WYTHAM/0323_204514/model_best_testset_analyzer.csv')
